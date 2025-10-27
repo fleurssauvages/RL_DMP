@@ -6,6 +6,7 @@ Example experiment:
  - Create environment with an obstacle
  - Create PowerRL and run several iterations of sampling + updating
  - Plot returns vs rollout
+ - Resample the obtain trajectory for minimal jerk
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -43,11 +44,14 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
     center_of_obstacles = np.array(demo['x'][int(len(demo['x'])/2), :3])
     demo_length = np.linalg.norm(demo['x'][-1, :3] - demo['x'][0, :3])
     obstacles = [
-        {'center': center_of_obstacles, 'radius': demo_length/8},
-        {'center': center_of_obstacles + np.array([0, 1, 0]) * demo_length/4, 'radius': demo_length/8},
-        {'center': center_of_obstacles - np.array([0, 1, 0]) * demo_length/4, 'radius': demo_length/8},
-        {'center': center_of_obstacles + np.array([0, 0, 1]) * demo_length/4, 'radius': demo_length/8},
-        {'center': center_of_obstacles - np.array([0, 0, 1]) * demo_length/4, 'radius': demo_length/8},
+        {'center': center_of_obstacles, 'radius': demo_length/6},
+        {'center': center_of_obstacles + np.array([0, 1, 0]) * demo_length/4, 'radius': demo_length/6},
+        {'center': center_of_obstacles - np.array([0, 1, 0]) * demo_length/4, 'radius': demo_length/6},
+        {'center': center_of_obstacles + np.array([0, 0, 1]) * demo_length/4, 'radius': demo_length/6},
+        {'center': center_of_obstacles - np.array([0, 0, 1]) * demo_length/4, 'radius': demo_length/6},
+        {'center': center_of_obstacles + np.array([0, -2, 2]) * demo_length/4, 'radius': demo_length/3},
+        {'center': center_of_obstacles + np.array([0, 2, 2]) * demo_length/4, 'radius': demo_length/3},
+        {'center': center_of_obstacles + np.array([0, 0, 3]) * demo_length/4, 'radius': demo_length/3},
     ]
     env = ReachingEnv(dmp, dt=dt, obstacles=obstacles, demo_traj=demo, goal=goal)
     
@@ -83,7 +87,7 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
 
     def rollout_job():
         params_k = agent.sample_policy()
-        traj = env.simulate(params_k)
+        traj = env.simulate_numba(params_k)
         Rk = env.rollout_return(traj,  w_demo=weight_demo, w_goal=weight_goal, w_jerk=weight_jerk, w_end_vel=weight_end_vel)
         return params_k, traj, Rk
     
@@ -211,4 +215,4 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=1, experiment_id=0, doPlot=True, export=False)
+    main(seed=1, experiment_id=0, doPlot=False, export=True)

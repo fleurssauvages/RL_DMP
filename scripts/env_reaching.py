@@ -5,6 +5,33 @@ Simulates only end-effector kinematics controlled by mixture-of-PD DMP.
 """
 import numpy as np
 from scipy.interpolate import interp1d
+from numba import njit
+
+@njit
+def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
+    D = start_x.shape[0]
+    K = centers.shape[0]
+    timesteps = int(np.ceil(duration / dt))
+    xs = np.zeros((timesteps, D))
+    xdots = np.zeros_like(xs)
+    xddots = np.zeros_like(xs)
+    
+    x = start_x.copy()
+    x_dot = start_xdot.copy()
+    for i in range(timesteps):
+        t = i * dt
+        exps = np.exp(-0.5 * ((t - centers)**2) / (sigmas + 1e-12))
+        hs = exps / (np.sum(exps) + 1e-12)
+        acc = np.zeros(D)
+        for k in range(K):
+            diff = X[k] - x
+            acc += hs[k] * (Kp[k] @ diff - V @ x_dot)
+        x_dot += acc * dt
+        x += x_dot * dt
+        xs[i] = x
+        xdots[i] = x_dot
+        xddots[i] = acc
+    return xs, xdots, xddots      
 
 class ReachingEnv:
     def __init__(self, dmp: object, dt=0.01,
@@ -28,7 +55,7 @@ class ReachingEnv:
             for ob in obstacles:
                 c = np.array(ob['center'])
                 r = float(ob['radius'])
-                self.obstacles.append({'center': c, 'radius': r})        
+                self.obstacles.append({'center': c, 'radius': r})  
     
     def simulate(self, params, start_x=None, start_xdot=None):
         """
@@ -60,13 +87,6 @@ class ReachingEnv:
             x_dot = x_dot + acc * self.dt
             x = x + x_dot * self.dt
 
-            # if not collided and obs_centers is not None:
-            #     dists = np.linalg.norm(x[:3] - obs_centers[:, :3], axis=1)
-            #     if np.any(dists <= obs_radii):
-            #         collided = True
-
-            # xs[i] = x
-            # xdots[i] = x_dot
             xddots[i] = acc
             t += self.dt
             
@@ -85,6 +105,37 @@ class ReachingEnv:
             'collided': collided
         }
         return traj
+    
+    def simulate_numba(self, params, start_x=None, start_xdot=None):
+        """
+        Run a rollout using numba. First initialization is slower, then the loop is x4 faster approx.
+        Returns trajectory dict with 't','x','xdot','xddot', 'collided' boolean
+        """
+        self.dmp.set_flat_params(params)
+        D = self.dmp.D
+        x0 = np.zeros(D) if start_x is None else np.array(start_x)
+        v0 = np.zeros(D) if start_xdot is None else np.array(start_xdot)
+
+        Kp = np.stack(self.dmp.Kp)
+        X = np.stack(self.dmp.X)
+        centers = self.dmp.centers
+        sigmas = self.dmp.sigmas
+        V = self.dmp.V
+
+        xs, xdots, xddots = rollout_numba(Kp, X, centers, sigmas, V,
+                                        self.dmp.duration, self.dt, x0, v0)
+
+        collided = False
+        if self.obstacles:
+            obs_centers = np.array([ob['center'] for ob in self.obstacles])
+            obs_radii = np.array([ob['radius'] for ob in self.obstacles])
+            dists = np.linalg.norm(xs[:, None, :3] - obs_centers[None, :, :3], axis=2)
+            collided = np.any(dists <= obs_radii)
+
+        traj = {'t': np.linspace(0, self.dmp.duration, xs.shape[0]),
+                'x': xs, 'xdot': xdots, 'xddot': xddots, 'collided': collided}
+        return traj
+
 
     def rollout_return(self, traj, w_demo=0.5, w_goal=0.5, w_jerk=0.005, w_end_vel=0.01):
         """

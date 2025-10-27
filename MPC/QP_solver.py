@@ -140,23 +140,18 @@ class QPController:
     def add_local_tangent_plane_constraints(self, obstacles):
         """
         For each spherical obstacle, create a local tangent plane toward each
-        considered joint (from start_joint_index to end-effector) and add a
-        constraint preventing that joint from crossing the plane, but only if
-        the joint projection lies within a local square patch (side = radius).
-        From A Quadratic Programming Approach to Manipulation in Real-Time Using Modular Robots, Chao Liu and Mark Yim, 2021
+        considered point/joint and add a constraint preventing that joint from crossing the plane.
+        A similar technique can be found in
+        A Quadratic Programming Approach to Manipulation in Real-Time Using Modular Robots, Chao Liu and Mark Yim, 2021
 
         Parameters
         ----------
         obstacles : list of dict
             [{'center': np.array(3), 'radius': float}, ...]
-        margin : float
-            Extra safety distance to keep from the tangent plane.
-        start_joint_index : int
-            Index (0-based) of the first joint to consider for obstacle avoidance.
         """
         
         franka_contact_points = [
-            # --- fingertips & palm center ---
+            # --- fingertips when gripper closed ---
             np.array([0.00, 0.00, 0.0]),   # center tips
 
             # # # --- palm corners (front face, outer square) ---

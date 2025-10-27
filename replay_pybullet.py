@@ -153,3 +153,5 @@ try:
 except KeyboardInterrupt:
     print("Simulation stopped by user.")
     p.disconnect()
+    
+p.disconnect()
