@@ -7,7 +7,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from numba import njit
 
-@njit
+@njit(cache=True)
 def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
     D = start_x.shape[0]
     K = centers.shape[0]

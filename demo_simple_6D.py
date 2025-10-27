@@ -215,4 +215,4 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=1, experiment_id=0, doPlot=False, export=True)
+    main(seed=1, experiment_id=0, doPlot=False, export=False)
