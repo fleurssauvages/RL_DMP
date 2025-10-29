@@ -48,7 +48,7 @@ pip install pybullet
   ```bash
   python demo_simple_6D.py
   ```
-  RL based on a demo to perform reaching with obstacle avoidance. The trajectory is then saved with pickle.
+  RL based on a demo to perform reaching with obstacle avoidance. The trajectory is then resampled for better velocity curvature and saved with pickle.
 
 - **Replaying in Pybullet**  
   ```bash
@@ -56,6 +56,11 @@ pip install pybullet
   ```
   The trajectory is then played on the robot, using an LMPC and QP controller. Multiple points of the robot effector (here a Franka, which has a large gripper) and computed during the obstacle avoidance by considering obstacles as spheres. The output velocity projected on their tangent planes are then computed to force avoidance of the whole gripper, not just the cartesian point considered during RL.
 
+- **Multi Agent RL and DMP**  
+  ```bash
+  python demo_multiagent_6D.py
+  ```
+  The RL is extended as a demonstration to multiple agents, with repulsion to increase diversity and strategies to different part of the explorable space.
 ---
 
 ## 📂 Project Structure
@@ -64,14 +69,17 @@ pip install pybullet
 ├── images/                         # Demo GIFs
 │   ├── RL.gif
 │   ├── pybullet.gif
+│   ├── RL_multi.gif
 ├── MPC/                            # Contains the LMPC and QP
 ├── scripts/
 │   ├── demo_utils.py               # utils for generating and plotting for the RL demo
 │   ├── env_reaching.py             # Environnement for DMP simulation
 │   ├── power_rl.py                 # Power RL from Kober
+│   ├── multiagent_power_rl.py      # Extended to multiple agents with repulsion for diversity
 │   ├── dmp.py                      # DMP class
 │   ├── resample.py                 # utils for resampling trajectories
 ├── demo_simple_6D.py               # Reinforcement learning demo
+├── demo_multiagent_6D.py           # Extension with multiple agents
 ├── replay_pybullet.py              # Replay trajectory on robot
 ├── README.md                       # Project documentation
 └── LICENSE                         # License file
@@ -84,12 +92,17 @@ pip install pybullet
 <div align="center">
 
 ### 🔹 Reinforcement learning for path finding
-<img src="images/RL.gif" width="600" alt="QP Solver">
+<img src="images/RL.gif" width="600" alt="RL">
 
 ---
 
 ### 🔹 Pybullet replaying with LMPC controller
 <img src="images/pybullet.gif" width="600" alt="LMPC">
+
+---
+
+### 🔹 Multi Agent RL
+<img src="images/RL_multi.gif" width="600" alt="RL Multi">
 
 ---
 
