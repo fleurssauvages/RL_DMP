@@ -148,10 +148,9 @@ try:
         time.sleep(dt)
         
         if sim_time > duration + 2.0:
+            p.disconnect()
             break
 
 except KeyboardInterrupt:
     print("Simulation stopped by user.")
     p.disconnect()
-    
-p.disconnect()

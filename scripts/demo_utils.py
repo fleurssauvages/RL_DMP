@@ -132,7 +132,7 @@ def plot_environment(ax, demo, obstacles, goal):
     ax.view_init(elev=10., azim=-20)
     set_axes_equal(ax)
         
-def plot_orientations(ax, traj, step=20, scale=0.05):
+def plot_orientations(ax, traj, step=20, scale=0.05, alpha=0.7):
     """
     Plot 3D position trajectory (first 3 dims of 6D x) and draw small orientation frames.
     The last 3 dims of x are interpreted as roll-pitch-yaw angles (in radians).
@@ -148,13 +148,13 @@ def plot_orientations(ax, traj, step=20, scale=0.05):
         # x,y,z axes of the local frame
         ax.quiver(origin[0], origin[1], origin[2],
                   rot[0,0]*scale, rot[1,0]*scale, rot[2,0]*scale,
-                  color='r', alpha=0.7)
+                  color='r', alpha=alpha)
         ax.quiver(origin[0], origin[1], origin[2],
                   rot[0,1]*scale, rot[1,1]*scale, rot[2,1]*scale,
-                  color='g', alpha=0.7)
+                  color='g', alpha=alpha)
         ax.quiver(origin[0], origin[1], origin[2],
                   rot[0,2]*scale, rot[1,2]*scale, rot[2,2]*scale,
-                  color='b', alpha=0.7)
+                  color='b', alpha=alpha)
 
 def plot_quaternions(ax, traj, step=20, scale=0.05):
     x = traj['x']

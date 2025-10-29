@@ -49,9 +49,6 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
         {'center': center_of_obstacles - np.array([0, 1, 0]) * demo_length/4, 'radius': demo_length/6},
         {'center': center_of_obstacles + np.array([0, 0, 1]) * demo_length/4, 'radius': demo_length/6},
         {'center': center_of_obstacles - np.array([0, 0, 1]) * demo_length/4, 'radius': demo_length/6},
-        {'center': center_of_obstacles + np.array([0, -2, 2]) * demo_length/4, 'radius': demo_length/3},
-        {'center': center_of_obstacles + np.array([0, 2, 2]) * demo_length/4, 'radius': demo_length/3},
-        {'center': center_of_obstacles + np.array([0, 0, 3]) * demo_length/4, 'radius': demo_length/3},
     ]
     env = ReachingEnv(dmp, dt=dt, obstacles=obstacles, demo_traj=demo, goal=goal)
     
@@ -92,6 +89,7 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
         return params_k, traj, Rk
     
     # ----- RL Loop -----
+    iter_times = np.zeros(n_iterations)
     for it in range(n_iterations):
         print(f"\n=== Iteration {it+1}/{n_iterations} ===")
         t0 = time.time()
@@ -122,7 +120,8 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
             best_traj, best_R = best_traj_prev, best_R_prev
             
         t1 = time.time()
-        print(f"Iteration time: {t1 - t0:.3f}s")
+        print(f"Iteration time: {t1 - t0:.4f}s")
+        iter_times[it] = t1 - t0
 
         # # ----- Visualization of rollouts -----
         if doPlot:
@@ -184,6 +183,9 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
             fig_traj.canvas.draw()
             fig_traj.canvas.flush_events()
 
+    print(f"\n✅ Experiment {experiment_id} completed!")
+    print(f"Median iteration time: {np.median(iter_times):.4f}s ± {np.std(iter_times):.4f}s")
+    print(f"Median framerate: {1.0/np.median(iter_times):.2f} it/s")
     traj_mj = resample_min_jerk(best_traj, duration=duration, N_new=int(duration/dt))
     
     xs, ys, zs = traj_mj['x'][:, 0], traj_mj['x'][:, 1], traj_mj['x'][:, 2]
@@ -215,4 +217,4 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=1, experiment_id=0, doPlot=False, export=False)
+    main(seed=1, experiment_id=0, doPlot=True, export=False)
