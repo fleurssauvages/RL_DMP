@@ -92,17 +92,17 @@ pip install pybullet
 <div align="center">
 
 ### 🔹 Reinforcement learning for path finding
-<img src="images/RL.gif" width="600" alt="RL">
+<img src="images/RL.gif" width="800" alt="RL">
 
 ---
 
 ### 🔹 Pybullet replaying with LMPC controller
-<img src="images/pybullet.gif" width="600" alt="LMPC">
+<img src="images/pybullet.gif" width="800" alt="LMPC">
 
 ---
 
 ### 🔹 Multi Agent RL
-<img src="images/RL_multi.gif" width="600" alt="RL Multi">
+<img src="images/RL_multi.gif" width="800" alt="RL Multi">
 
 ---
 
