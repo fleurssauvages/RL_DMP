@@ -90,7 +90,6 @@ def main(seed=1, doAnimation=False, export=False):
     # ----- RL Loop -----
     iter_times = np.zeros(n_iterations)
     for it in range(n_iterations):
-        print(f"\n=== Iteration {it+1}/{n_iterations} ===")
         t0 = time.time()
         agent.reset_history()
         iter_returns = []
@@ -119,8 +118,10 @@ def main(seed=1, doAnimation=False, export=False):
             best_traj, best_R = best_traj_prev, best_R_prev
             
         t1 = time.time()
-        print(f"Iteration time: {t1 - t0:.4f}s")
         iter_times[it] = t1 - t0
+        if doAnimation:
+            print(f"\n=== Iteration {it+1}/{n_iterations} ===")
+            print(f"Iteration time: {t1 - t0:.4f}s")
 
         # # ----- Visualization of rollouts -----
         if doAnimation:

@@ -14,7 +14,7 @@ from scripts.demo_utils import make_demo_6D, init_from_demo, plot_environment, s
 from scripts.multiagent_power_rl import MultiAgentPowerRL
 import pickle
 
-def main(seed=1, doPlot=True, export=False):
+def main(seed=1, doAnimation=True, export=False):
     np.random.seed(seed)
     
     # --- Parameters ---
@@ -58,7 +58,7 @@ def main(seed=1, doPlot=True, export=False):
     best_R = -np.inf
 
     # --- Visualization setup ---
-    if doPlot:
+    if doAnimation:
         fig = plt.figure(figsize=(22, 14))
         ax_traj = fig.add_subplot(121, projection='3d')
         ax_ret = fig.add_subplot(122)
@@ -115,9 +115,10 @@ def main(seed=1, doPlot=True, export=False):
             dmp.set_flat_params(best_agent.theta)
 
         t1 = time.time()
-        print(f"Iteration {it+1}/{n_iterations} | Best Agent {best_idx} | Best Return {best_R:.3f}")
-        print(f"Iteration time: {t1 - t0:.3f}s")
         iter_times[it] = time.time() - t0
+        if doAnimation:
+            print(f"Iteration {it+1}/{n_iterations} | Best Agent {best_idx} | Best Return {best_R:.3f}")
+            print(f"Iteration time: {t1 - t0:.3f}s")
         
         # --- Compute best traj/return per agent ---
         best_trajs_per_agent = []
@@ -139,7 +140,7 @@ def main(seed=1, doPlot=True, export=False):
             best_trajs_per_agent.append(best_traj)
 
         # --- Visualization ---
-        if doPlot:
+        if doAnimation:
             fig.clf()
             ax_traj = fig.add_subplot(121, projection='3d')
             ax_ret = fig.add_subplot(122)
@@ -216,7 +217,7 @@ def main(seed=1, doPlot=True, export=False):
     print("\n Multi-agent training complete.")
     print(f"Median iteration time: {np.median(iter_times):.4f}s")
     print(f"Median framerate: {1.0/np.median(iter_times):.2f} it/s")
-    if doPlot:
+    if doAnimation:
         plt.show()
     
     if export:
@@ -234,4 +235,4 @@ def main(seed=1, doPlot=True, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=1, doPlot=False, export=False)
+    main(seed=1, doAnimation=False, export=False)
