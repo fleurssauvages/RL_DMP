@@ -20,8 +20,8 @@ from scripts.env_reaching import ReachingEnv
 from scripts.demo_utils import make_demo_6D, init_from_demo, plot_environment, set_axes_equal, plot_orientations, make_exploration_std
 from scripts.resample import resample_min_jerk
 
-def main(seed=1, experiment_id=0, doPlot=False, export=False):
-    print(f"\n🚀 Starting experiment {experiment_id} with seed={seed}")
+def main(seed=1, doPlot=False, export=False):
+    print(f"\n🚀 Starting experiment with seed={seed}")
     np.random.seed(seed)
 
     # ----- Parameters and Setup -----
@@ -183,7 +183,6 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
             fig_traj.canvas.draw()
             fig_traj.canvas.flush_events()
 
-    print(f"\n Experiment {experiment_id} completed!")
     print(f"Median iteration time: {np.median(iter_times):.4f}s")
     print(f"Median framerate: {1.0/np.median(iter_times):.2f} it/s")
     traj_mj = resample_min_jerk(best_traj, duration=duration, N_new=int(duration/dt))
@@ -217,4 +216,4 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=1, experiment_id=0, doPlot=False, export=False)
+    main(seed=1, doPlot=False, export=False)

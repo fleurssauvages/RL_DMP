@@ -5,9 +5,9 @@ Simulates only end-effector kinematics controlled by mixture-of-PD DMP.
 """
 import numpy as np
 from scipy.interpolate import interp1d
-from numba import njit, prange
+from numba import njit
 
-@njit(cache=True, parallel=False, fastmath=False)
+@njit(cache=True)
 def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
     D = start_x.shape[0]
     K = centers.shape[0]
@@ -19,7 +19,7 @@ def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
     x = start_x.copy()
     x_dot = start_xdot.copy()
     
-    for i in prange(timesteps):
+    for i in range(timesteps):
         t = i * dt
         exps = np.exp(-0.5 * ((t - centers)**2) / (sigmas + 1e-12))
         hs = exps / (np.sum(exps) + 1e-12)

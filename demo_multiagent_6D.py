@@ -65,6 +65,7 @@ def main(seed=1, doPlot=True, export=False):
         fig.canvas.manager.set_window_title('Multi-Agent Trajectories')
 
     # --- Main loop ---
+    iter_times = np.zeros(n_iterations)
     for it in range(n_iterations):
         t0 = time.time()
         population.reset_histories()
@@ -113,8 +114,10 @@ def main(seed=1, doPlot=True, export=False):
             best_traj = env.simulate_numba(best_agent.theta)
             dmp.set_flat_params(best_agent.theta)
 
+        t1 = time.time()
         print(f"Iteration {it+1}/{n_iterations} | Best Agent {best_idx} | Best Return {best_R:.3f}")
-        print(f"Iteration time: {time.time() - t0:.3f}s")
+        print(f"Iteration time: {t1 - t0:.3f}s")
+        iter_times[it] = time.time() - t0
         
         # --- Compute best traj/return per agent ---
         best_trajs_per_agent = []
@@ -211,6 +214,8 @@ def main(seed=1, doPlot=True, export=False):
             plt.pause(0.01)
 
     print("\n Multi-agent training complete.")
+    print(f"Median iteration time: {np.median(iter_times):.4f}s")
+    print(f"Median framerate: {1.0/np.median(iter_times):.2f} it/s")
     plt.show()
     
     if export:
