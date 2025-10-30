@@ -5,9 +5,10 @@ Simulates only end-effector kinematics controlled by mixture-of-PD DMP.
 """
 import numpy as np
 from scipy.interpolate import interp1d
-from numba import njit
+from numba import njit, set_num_threads, prange
+set_num_threads(1)
 
-@njit(cache=True)
+@njit(cache=True, parallel=False) # Parallel makes iterations faster but first call slower, choose depending on usage context
 def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
     D = start_x.shape[0]
     K = centers.shape[0]
@@ -19,7 +20,7 @@ def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
     x = start_x.copy()
     x_dot = start_xdot.copy()
     
-    for i in range(timesteps):
+    for i in prange(timesteps):
         t = i * dt
         exps = np.exp(-0.5 * ((t - centers)**2) / (sigmas + 1e-12))
         hs = exps / (np.sum(exps) + 1e-12)
@@ -27,7 +28,7 @@ def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
         # Vectorized acceleration calculation
         diff = X - x
         acc = np.zeros(D)
-        for k in range(K):
+        for k in prange(K):
             acc += hs[k] * (Kp[k] @ diff[k] - V @ x_dot)
         
         x_dot += acc * dt

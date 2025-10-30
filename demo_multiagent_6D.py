@@ -16,7 +16,7 @@ import pickle
 
 def main(seed=1, doPlot=True, export=False):
     np.random.seed(seed)
-
+    
     # --- Parameters ---
     D, K = 6, 4
     duration, dt = 1.0, 0.01
