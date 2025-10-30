@@ -6,20 +6,25 @@ import roboticstoolbox as rtb
 import os
 import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 
 from MPC.QP_solver import QPController
 from MPC.LMPC_solver import LinearMPCController
 import spatialmath as sm
 from scripts.demo_utils import make_demo_6D
 
-filename = "records/trajectory.pkl"  # <-- replace with your filename
-with open(filename, 'rb') as f:
-    data = pickle.load(f)
+foldername = "records"
+n_traj = 5
+traj_list = []
+for i in range(n_traj):
+    filename = "records/trajectory" + str(i) + ".pkl"  # <-- replace with your filename
+    with open(filename, 'rb') as f:
+        data = pickle.load(f)
+    traj_list.append(data["trajectory"])  # Nx6 array [x, y, z, roll, pitch, yaw]
 
-traj = data["trajectory"]  # Nx6 array [x, y, z, roll, pitch, yaw]
 duration = data["duration"]
 dt = data["dt"]
-print(f"Loaded samples of duration {duration:.2f}s, dt={dt:.3f}s")
+print(f"Loaded {n_traj:.2f} samples of duration {duration:.2f}s, dt={dt:.3f}s")
 
 # Start PyBullet in GUI mode
 physicsClient = p.connect(p.GUI)
@@ -111,51 +116,54 @@ for obs in obstacles:
     )
     
 # Plot trajectory
-for i in range(len(traj['x'])-1):
-    t1 = (sm.SE3.Trans(traj['x'][i, :3]) * Tini).t
-    t2 = (sm.SE3.Trans(traj['x'][i+1, :3]) * Tini).t
-    p.addUserDebugLine(t1, t2, [0, 1, 0], lineWidth=3)
+cmap = plt.cm.get_cmap("nipy_spectral", n_traj)
+for k, traj in enumerate(traj_list):
+    for i in range(len(traj['x'])-1):
+        t1 = (sm.SE3.Trans(traj['x'][i, :3]) * Tini).t
+        t2 = (sm.SE3.Trans(traj['x'][i+1, :3]) * Tini).t
+        p.addUserDebugLine(t1, t2, cmap(k)[0:3], lineWidth=3)
 
-try:
-    while True:
-        if sim_time < duration:
-            T_des = sm.SE3.Trans(traj['x'][int(sim_time/dt), :3]) * Tini
-        else:
-            T_des = sm.SE3.Trans(traj['x'][-1, :3]) * Tini
-        # Compute desired pose from trajectory
-        T_current = panda.fkine(panda.q)
-        Uopt, Xopt, poses = lmpc_solver.solve(T_current, T_des)
+for traj in traj_list:
+    for j in joint_indices:
+        p.resetJointState(panda_id, j, panda.qr[j])
+    panda.q = panda.qr
+    sim_time = 0.0
+    try:
+        while sim_time < duration + 0.5:
+            if sim_time < duration:
+                T_des = sm.SE3.Trans(traj['x'][int(sim_time/dt), :3]) * Tini
+            else:
+                T_des = sm.SE3.Trans(traj['x'][-1, :3]) * Tini
+            # Compute desired pose from trajectory
+            T_current = panda.fkine(panda.q)
+            Uopt, Xopt, poses = lmpc_solver.solve(T_current, T_des)
 
-        #Solve QP
-        qp_solver.update_robot_state(panda)
-        qp_solver.add_local_tangent_plane_constraints(obstacles, margin = 0.0)
-        qp_solver.solve(Uopt[0:6], alpha=0.02, beta=0.01)
-        
-        panda.qd = qp_solver.solution
-        
-        # Apply low level velocity control
-        p.setJointMotorControlArray(
-            panda_id,
-            jointIndices=joint_indices,
-            controlMode=p.VELOCITY_CONTROL,
-            targetVelocities= qp_solver.solution,
-        )
-        
-        # Step simulation
-        q, qd = [], []
-        for j in range(7):
-            state = p.getJointState(panda_id, j)
-            q.append(state[0])
-            qd.append(state[1])
-        panda.q = np.array(q)
-        
-        sim_time += dt
-        time.sleep(dt)
-        
-        if sim_time > duration + 2.0:
-            p.disconnect()
-            break
+            #Solve QP
+            qp_solver.update_robot_state(panda)
+            qp_solver.add_local_tangent_plane_constraints(obstacles, margin = 0.05)
+            qp_solver.solve(Uopt[0:6], alpha=0.02, beta=0.01)
+            
+            panda.qd = qp_solver.solution
+            
+            # Apply low level velocity control
+            p.setJointMotorControlArray(
+                panda_id,
+                jointIndices=joint_indices,
+                controlMode=p.VELOCITY_CONTROL,
+                targetVelocities= qp_solver.solution,
+            )
+            
+            # Step simulation
+            q, qd = [], []
+            for j in range(7):
+                state = p.getJointState(panda_id, j)
+                q.append(state[0])
+                qd.append(state[1])
+            panda.q = np.array(q)
+            
+            sim_time += dt
+            time.sleep(dt)
 
-except KeyboardInterrupt:
-    print("Simulation stopped by user.")
-    p.disconnect()
+    except KeyboardInterrupt:
+        print("Simulation stopped by user.")
+        p.disconnect()

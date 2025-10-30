@@ -137,7 +137,7 @@ class QPController:
         self.add_constraint(G, h)
         pass
 
-    def add_local_tangent_plane_constraints(self, obstacles):
+    def add_local_tangent_plane_constraints(self, obstacles, margin = 0.05):
         """
         For each spherical obstacle, create a local tangent plane toward each
         considered point/joint and add a constraint preventing that joint from crossing the plane.
@@ -163,7 +163,7 @@ class QPController:
         
         for obs in obstacles:
             sphere_center = np.array(obs['center'], dtype=float)
-            sphere_radius = float(obs['radius'])
+            sphere_radius = float(obs['radius']) + abs(margin)
                         
             T_ee = self.robot.fkine(self.joint_positions)
             R_ee, p_ee = T_ee.R, T_ee.t

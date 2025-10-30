@@ -61,6 +61,12 @@ pip install pybullet
   python demo_multiagent_6D.py
   ```
   The RL is extended as a demonstration to multiple agents, with repulsion to increase diversity and strategies to different part of the explorable space.
+
+- **Multi Replay**  
+  ```bash
+  python replay_pybullet_multi.py
+  ```
+  Each trajectory is replayed succesively. Note: this could be use to evaluate which trajectories are actually replayable with the full robot model and controller.
 ---
 
 ## 📂 Project Structure
@@ -81,6 +87,7 @@ pip install pybullet
 ├── demo_simple_6D.py               # Reinforcement learning demo
 ├── demo_multiagent_6D.py           # Extension with multiple agents
 ├── replay_pybullet.py              # Replay trajectory on robot
+├── replay_pybullet_multi.py        # Replay multiple trajectory on robot successively
 ├── README.md                       # Project documentation
 └── LICENSE                         # License file
 ```

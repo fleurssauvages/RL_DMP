@@ -13,8 +13,9 @@ from scripts.env_reaching import ReachingEnv
 from scripts.demo_utils import make_demo_6D, init_from_demo, plot_environment, set_axes_equal, plot_orientations, make_exploration_std
 from scripts.multiagent_power_rl import MultiAgentPowerRL
 from scripts.resample import resample_min_jerk
+import pickle
 
-def main(seed=1, doPlot=True):
+def main(seed=1, doPlot=True, export=False):
     np.random.seed(seed)
 
     # --- Parameters ---
@@ -116,7 +117,7 @@ def main(seed=1, doPlot=True):
             dmp.set_flat_params(best_agent.theta)
 
         print(f"Iteration {it+1}/{n_iterations} | Best Agent {best_idx} | Best Return {best_R:.3f}")
-        print(f"Iteration time: {time.time() - t0:.2f}s")
+        print(f"Iteration time: {time.time() - t0:.3f}s")
         
         # --- Compute best traj/return per agent ---
         best_trajs_per_agent = []
@@ -158,18 +159,6 @@ def main(seed=1, doPlot=True):
                 xs, ys, zs = traj_best_local['x'][:, 0], traj_best_local['x'][:, 1], traj_best_local['x'][:, 2]
                 ax_traj.plot(xs, ys, zs, color=cmap(i), linewidth=2.5, label=f"Agent {i} best (R={best_returns_per_agent[i]:.3f})")
                 plot_orientations(ax_traj, traj_best_local, step=10, scale=0.02, alpha=0.4)
-
-            # # Highlight best trajectory
-            # xs, ys, zs = best_traj['x'][:, 0], best_traj['x'][:, 1], best_traj['x'][:, 2]
-            # ax_traj.plot(xs, ys, zs, 'g-', linewidth=3, label=f'Best Agent {best_idx} (R={best_R:.3f})')
-            # plot_orientations(ax_traj, best_traj, step=10, scale=0.05)
-            
-            # traj_mj = resample_min_jerk(best_traj, duration=duration, N_new=int(duration/dt))
-            # v = traj_mj['xdot'][:, :3]
-            # t = traj_mj['t']
-            # v_mag = np.linalg.norm(v, axis=1)
-            # ax_vel.plot(t, v_mag, label=f'Resampled', color= "green", linestyle='-.')
-            # ax_vel.legend(loc='upper right', fontsize='small')
 
             # === Returns plot (vectorized, color-coded per agent) ===
             rollouts_per_iter_total = n_agents * rollouts_per_agent
@@ -226,7 +215,20 @@ def main(seed=1, doPlot=True):
 
     print("\n✅ Multi-agent training complete.")
     plt.show()
+    
+    if export:
+        for i in range(n_agents):
+            best_traj_i = best_trajs_per_agent[i]
+            data = {
+                "trajectory": best_traj_i,
+                "duration": duration,
+                "dt": dt
+                }
+            filename = f"records/trajectory" + str(i) + ".pkl"
+            with open(filename, 'wb') as f:
+                pickle.dump(data, f)
+            print(f"✅ Saved trajectory to {filename}")
 
 
 if __name__ == "__main__":
-    main(seed=1, doPlot=True)
+    main(seed=1, doPlot=True, export=True)

@@ -8,7 +8,6 @@ Each agent explores a different region of parameter space.
 import numpy as np
 from scripts.power_rl import PowerRL
 
-
 class MultiAgentPowerRL:
     def __init__(self, init_params, exploration_std, n_agents=5, reuse_top_n=6, diversity_strength=0.1):
         """
@@ -19,6 +18,7 @@ class MultiAgentPowerRL:
         """
         self.n_agents = n_agents
         self.diversity_strength = diversity_strength
+        self.exploration_std = exploration_std
         self.agents = []
 
         for i in range(n_agents):
@@ -40,12 +40,14 @@ class MultiAgentPowerRL:
             agent.update()
 
     def apply_diversity_pressure(self, exploration_std=None, iteration=None, decay=0.98):
+        if exploration_std is None:
+            exploration_std = self.exploration_std
         """
         Apply repulsive forces between agents in parameter space, adaptively scaled.
         """
         thetas = np.array([a.theta for a in self.agents])
         n = len(self.agents)
-        repulsion_range = 5.0 * np.mean(exploration_std) if exploration_std is not None else 1.0
+        repulsion_range = 5.0 * np.mean(exploration_std)
         adaptive_strength = self.diversity_strength
 
         # Optional decay over iterations
