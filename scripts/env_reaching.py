@@ -6,7 +6,7 @@ Simulates only end-effector kinematics controlled by mixture-of-PD DMP.
 import numpy as np
 from scipy.interpolate import interp1d
 from numba import njit, set_num_threads, prange
-set_num_threads(1)
+set_num_threads(1) # Avoid overwrite when running parallel jobs
 
 @njit(cache=True, parallel=False) # Parallel makes iterations faster but first call slower, choose depending on usage context
 def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
@@ -118,7 +118,7 @@ class ReachingEnv:
     
     def simulate_numba(self, params, start_x=None, start_xdot=None):
         """
-        Run a rollout using numba. First initialization is slower, then the loop is x4 faster approx.
+        Run a rollout using numba. First initialization is slower, then the loop is much faster.
         Returns trajectory dict with 't','x','xdot','xddot', 'collided' boolean
         """
         self.dmp.set_flat_params(params)
