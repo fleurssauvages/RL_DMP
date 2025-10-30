@@ -11,7 +11,6 @@ Example experiment:
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from joblib import Parallel, delayed
 import pickle
 
 from scripts.dmp import MixturePD
@@ -20,7 +19,7 @@ from scripts.env_reaching import ReachingEnv
 from scripts.demo_utils import make_demo_6D, init_from_demo, plot_environment, set_axes_equal, plot_orientations, make_exploration_std
 from scripts.resample import resample_min_jerk
 
-def main(seed=1, doPlot=False, export=False):
+def main(seed=1, doAnimation=False, export=False):
     print(f"\n🚀 Starting experiment with seed={seed}")
     np.random.seed(seed)
 
@@ -76,7 +75,7 @@ def main(seed=1, doPlot=False, export=False):
     ax_vel.set_xlim(0, duration)
     ax_vel.set_ylim(0, 1.6)
     
-    if doPlot:
+    if doAnimation:
         plt.show(block=False)
         plt.pause(0.01)
     
@@ -124,7 +123,7 @@ def main(seed=1, doPlot=False, export=False):
         iter_times[it] = t1 - t0
 
         # # ----- Visualization of rollouts -----
-        if doPlot:
+        if doAnimation:
             fig_traj.clf()
             ax_traj = fig_traj.add_subplot(121, projection='3d')
             ax_vel = fig_traj.add_subplot(143)
@@ -212,8 +211,8 @@ def main(seed=1, doPlot=False, export=False):
         filename = f"records/trajectory.pkl"
         with open(filename, 'wb') as f:
             pickle.dump(data, f)
-        print(f"✅ Saved trajectory to {filename}")
+        print(f"Saved trajectory to {filename}")
 
 
 if __name__ == "__main__":
-    main(seed=1, doPlot=False, export=False)
+    main(seed=1, doAnimation=False, export=False)

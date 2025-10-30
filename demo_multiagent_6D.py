@@ -216,7 +216,8 @@ def main(seed=1, doPlot=True, export=False):
     print("\n Multi-agent training complete.")
     print(f"Median iteration time: {np.median(iter_times):.4f}s")
     print(f"Median framerate: {1.0/np.median(iter_times):.2f} it/s")
-    plt.show()
+    if doPlot:
+        plt.show()
     
     if export:
         for i in range(n_agents):
