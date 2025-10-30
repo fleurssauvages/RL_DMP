@@ -62,9 +62,9 @@ class MultiAgentPowerRL:
                 diff = agent.theta - thetas[j]
                 dist = np.linalg.norm(diff)
                 if dist < 1e-8:
-                    continue
+                    dist = 0.001  # avoid division by zero
                 # Exponentially damped repulsion, capped by distance range
-                scale = np.exp(-dist / repulsion_range) / (dist + 1e-8)
+                scale = np.exp(-dist / repulsion_range) / dist
                 repulsion += diff * scale
             agent.theta += adaptive_strength * repulsion
 

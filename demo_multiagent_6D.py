@@ -12,7 +12,6 @@ from scripts.dmp import MixturePD
 from scripts.env_reaching import ReachingEnv
 from scripts.demo_utils import make_demo_6D, init_from_demo, plot_environment, set_axes_equal, plot_orientations, make_exploration_std
 from scripts.multiagent_power_rl import MultiAgentPowerRL
-from scripts.resample import resample_min_jerk
 import pickle
 
 def main(seed=1, doPlot=True, export=False):
@@ -86,10 +85,8 @@ def main(seed=1, doPlot=True, export=False):
         # Create one job per (agent, rollout)
         jobs = [agent_id for agent_id in range(n_agents) for _ in range(rollouts_per_agent)]
 
-        # Run all rollouts in parallel
-        results_all = Parallel(n_jobs=-1)(
-            delayed(rollout_job)(agent_id) for agent_id in jobs
-        )
+        # Run all rollouts
+        results_all = [rollout_job(agent_id) for agent_id in jobs]
 
         # Prepare collections
         rollouts_data = []  # for plotting
@@ -213,7 +210,7 @@ def main(seed=1, doPlot=True, export=False):
             fig.tight_layout()
             plt.pause(0.01)
 
-    print("\n✅ Multi-agent training complete.")
+    print("\n Multi-agent training complete.")
     plt.show()
     
     if export:
@@ -227,8 +224,8 @@ def main(seed=1, doPlot=True, export=False):
             filename = f"records/trajectory" + str(i) + ".pkl"
             with open(filename, 'wb') as f:
                 pickle.dump(data, f)
-            print(f"✅ Saved trajectory to {filename}")
+            print(f"Saved trajectory to {filename}")
 
 
 if __name__ == "__main__":
-    main(seed=1, doPlot=True, export=True)
+    main(seed=1, doPlot=False, export=False)

@@ -97,7 +97,7 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
         iter_returns = []
         rollouts = []
 
-        results = Parallel(n_jobs=-1)(delayed(rollout_job)() for _ in range(rollouts_per_iter))
+        results = [rollout_job() for _ in range(rollouts_per_iter)]
         
         params_list, traj_list, R_list = zip(*results)
         agent.history_params.extend(params_list)
@@ -183,8 +183,8 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
             fig_traj.canvas.draw()
             fig_traj.canvas.flush_events()
 
-    print(f"\n✅ Experiment {experiment_id} completed!")
-    print(f"Median iteration time: {np.median(iter_times):.4f}s ± {np.std(iter_times):.4f}s")
+    print(f"\n Experiment {experiment_id} completed!")
+    print(f"Median iteration time: {np.median(iter_times):.4f}s")
     print(f"Median framerate: {1.0/np.median(iter_times):.2f} it/s")
     traj_mj = resample_min_jerk(best_traj, duration=duration, N_new=int(duration/dt))
     
@@ -217,4 +217,4 @@ def main(seed=1, experiment_id=0, doPlot=False, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=1, experiment_id=0, doPlot=True, export=False)
+    main(seed=1, experiment_id=0, doPlot=False, export=False)

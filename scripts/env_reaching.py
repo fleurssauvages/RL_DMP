@@ -5,9 +5,9 @@ Simulates only end-effector kinematics controlled by mixture-of-PD DMP.
 """
 import numpy as np
 from scipy.interpolate import interp1d
-from numba import njit
+from numba import njit, prange
 
-@njit(cache=True)
+@njit(cache=True, parallel=False, fastmath=False)
 def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
     D = start_x.shape[0]
     K = centers.shape[0]
@@ -18,19 +18,24 @@ def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
     
     x = start_x.copy()
     x_dot = start_xdot.copy()
-    for i in range(timesteps):
+    
+    for i in prange(timesteps):
         t = i * dt
         exps = np.exp(-0.5 * ((t - centers)**2) / (sigmas + 1e-12))
         hs = exps / (np.sum(exps) + 1e-12)
+        
+        # Vectorized acceleration calculation
+        diff = X - x
         acc = np.zeros(D)
         for k in range(K):
-            diff = X[k] - x
-            acc += hs[k] * (Kp[k] @ diff - V @ x_dot)
+            acc += hs[k] * (Kp[k] @ diff[k] - V @ x_dot)
+        
         x_dot += acc * dt
         x += x_dot * dt
         xs[i] = x
         xdots[i] = x_dot
         xddots[i] = acc
+        
     return xs, xdots, xddots      
 
 class ReachingEnv:
@@ -47,6 +52,11 @@ class ReachingEnv:
         self.dt = dt
         self.timesteps = int(np.ceil(dmp.duration / dt))
         self.demo = demo_traj
+        if demo_traj is not None:
+            demo_t = demo_traj['t']
+            demo_x = demo_traj['x']
+            target_t = np.linspace(0.0, dmp.duration, self.timesteps)
+            self.demo_resampled = interp1d(demo_t, demo_x, axis=0)(target_t)
         self.goal = np.array(goal) if goal is not None else np.zeros(dmp.D)
 
         # Normalize obstacle data
@@ -87,11 +97,10 @@ class ReachingEnv:
             x_dot = x_dot + acc * self.dt
             x = x + x_dot * self.dt
 
+            xs[i] = x
+            xdots[i] = x_dot
             xddots[i] = acc
             t += self.dt
-            
-        xdots = np.cumsum(xddots, axis=0) * self.dt
-        xs = np.cumsum(xdots, axis=0) * self.dt
             
         if obs_centers is not None:
             dists = np.linalg.norm(xs[:, None, :3] - obs_centers[None, :, :3], axis=2)
@@ -147,14 +156,8 @@ class ReachingEnv:
         T = traj['x'].shape[0]
         # Path matching term: if demo provided, compute per-step distance
         path_score = 0.0
-        if self.demo is not None:
-            demo_x = self.demo['x']
-            # Resample demo to T if not same length
-            if demo_x.shape[0] != T:
-                demo_t = np.linspace(0.0, self.dmp.duration, demo_x.shape[0])
-                f = interp1d(demo_t, demo_x, axis=0)
-                demo_x = f(np.linspace(0.0, self.dmp.duration, T))
-            diffs = np.linalg.norm(traj['x'] - demo_x, axis=1)
+        if self.demo_resampled is not None:
+            diffs = np.linalg.norm(traj['x'] - self.demo_resampled, axis=1)
             path_score = (1.0 / T) * np.sum(np.exp(-diffs))
             
         # Final goal term
