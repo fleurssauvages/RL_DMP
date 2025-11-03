@@ -14,7 +14,7 @@ class MultiAgentPowerRL:
         init_params: (P,) np.array, initial parameter vector
         exploration_std: scalar or (P,), base exploration std dev
         n_agents: number of parallel agents
-        diversity_strength: repulsion coefficient (typ. 0.05–0.2 * exploration_std)
+        diversity_strength: repulsion coefficient
         """
         self.n_agents = n_agents
         self.diversity_strength = diversity_strength

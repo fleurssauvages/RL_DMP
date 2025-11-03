@@ -104,14 +104,14 @@ for obs in obstacles:
         radius=obs['radius'],
         rgbaColor=[1, 0, 0, 0.7]  # red, semi-transparent
     )
-    collision_shape_id = p.createCollisionShape(
-        shapeType=p.GEOM_SPHERE,
-        radius=obs['radius']
-    )
+    # collision_shape_id = p.createCollisionShape(
+    #     shapeType=p.GEOM_SPHERE,
+    #     radius=obs['radius']
+    # )
     p.createMultiBody(
         baseMass=0,  # static
         baseVisualShapeIndex=visual_shape_id,
-        baseCollisionShapeIndex=collision_shape_id,
+        # baseCollisionShapeIndex=collision_shape_id,
         basePosition=obs['center'].tolist()
     )
     
@@ -129,7 +129,7 @@ for traj in traj_list:
     panda.q = panda.qr
     sim_time = 0.0
     try:
-        while sim_time < duration + 0.5:
+        while sim_time < duration + 1.0:
             if sim_time < duration:
                 T_des = sm.SE3.Trans(traj['x'][int(sim_time/dt), :3]) * Tini
             else:
@@ -140,7 +140,7 @@ for traj in traj_list:
 
             #Solve QP
             qp_solver.update_robot_state(panda)
-            qp_solver.add_local_tangent_plane_constraints(obstacles, margin = 0.05)
+            qp_solver.add_local_tangent_plane_constraints(obstacles, margin = 0.00)
             qp_solver.solve(Uopt[0:6], alpha=0.02, beta=0.01)
             
             panda.qd = qp_solver.solution

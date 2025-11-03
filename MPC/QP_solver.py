@@ -150,9 +150,17 @@ class QPController:
             [{'center': np.array(3), 'radius': float}, ...]
         """
         
+        def skew(v):
+            return np.array([
+                [0, -v[2],  v[1]],
+                [v[2], 0,  -v[0]],
+                [-v[1], v[0],  0]
+            ])
+        
         franka_contact_points = [
             # --- fingertips when gripper closed ---
             np.array([0.00, 0.00, 0.0]),   # center tips
+            np.array([0.00, 0.00, -0.06]), # center palm
 
             # # # --- palm corners (front face, outer square) ---
             np.array([+0.0, -0.12, -0.08]), # top-right
@@ -178,12 +186,6 @@ class QPController:
                 # Spatial Jacobian at this point: Jp = Jv + ω×r
                 # The linear velocity part for an offset point is:
                 # v_p = v + ω × r  => Jv_p = Jv + [ω]× * Jw = Jv - skew(r) * Jw
-                def skew(v):
-                    return np.array([
-                        [0, -v[2],  v[1]],
-                        [v[2], 0,  -v[0]],
-                        [-v[1], v[0],  0]
-                    ])
 
                 r = p_world - p_ee
                 Jp = Jv - skew(r) @ Jw
@@ -199,8 +201,76 @@ class QPController:
                 # Tangent plane: obstacle surface offset
                 o_prime = sphere_center - sphere_radius * s
 
-                # Linear constraint: (s^T * Jp + (p × s)^T * Jw) * qdot <= ||o' - p|| / dt
+                # Linear constraint: (s.T * Jp) * qdot <= ||o' - p|| / dt
                 A_row = s.T @ Jp  # shape (n_dof,)
-                b_scalar = (dist - sphere_radius) / (self.dt * 2)
+                b_scalar = np.linalg.norm(o_prime - p_world) / (self.dt * 2)
 
                 self.add_constraint(A_row, b_scalar)
+                
+    def add_local_gaussian_tangent_plane_constraints(self, obstacles, margin = 0.05):
+            """
+            For each spherical obstacle, create a local tangent plane toward each
+            considered point/joint and add a constraint preventing that joint from crossing the plane.
+            A similar technique can be found in
+            A Quadratic Programming Approach to Manipulation in Real-Time Using Modular Robots, Chao Liu and Mark Yim, 2021
+
+            Parameters
+            ----------
+            obstacles : list of dict
+                [{'center': np.array(3), 'radius': float}, ...]
+            """
+            
+            def skew(v):
+                return np.array([
+                    [0, -v[2],  v[1]],
+                    [v[2], 0,  -v[0]],
+                    [-v[1], v[0],  0]
+                ])
+            
+            franka_contact_points = [
+                # --- fingertips when gripper closed ---
+                np.array([0.00, 0.00, 0.0]),   # center tips
+                np.array([0.00, 0.00, -0.06]), # center palm
+
+                # # # --- palm corners (front face, outer square) ---
+                np.array([+0.0, -0.12, -0.08]), # top-right
+                np.array([+0.0, 0.12, -0.08]), # top-left
+                np.array([+0.0, -0.12, -0.04]), # bottom-right
+                np.array([+0.0, 0.12, -0.04]), # bottom-left
+            ]
+            
+            for obs in obstacles:
+                mu = np.array(obs['center'], dtype=float)
+                Sigma = np.array(obs['Sigma'], dtype=float)
+                c = float(obs.get('level', 1.0))  # Mahalanobis level (analogous to radius)
+                Sigma_inv = np.linalg.inv(Sigma)
+                
+                T_ee = self.robot.fkine(self.joint_positions)
+                R_ee, p_ee = T_ee.R, T_ee.t
+                J = self.robot.jacob0(self.joint_positions)
+                Jv = J[0:3, :]     # linear part
+                Jw = J[3:6, :]     # angular part
+
+                for p_local in franka_contact_points:
+                    p_world = p_ee + R_ee @ p_local
+
+                    r = p_world - p_ee
+                    Jp = Jv - skew(r) @ Jw
+
+                    d = p_world - mu
+                    dist_mahal = np.sqrt(d.T @ Sigma_inv @ d)
+                    if dist_mahal < 1e-9:
+                        s = np.array([1.0, 0.0, 0.0])
+                        o_prime = mu + c * s
+                    else:
+                        # Projected point on the ellipsoid surface
+                        o_prime = mu + (c / dist_mahal) * d
+
+                        # Tangent-plane normal at that point (ellipsoid surface normal)
+                        n = Sigma_inv @ (o_prime - mu)
+                        s = n / np.linalg.norm(n)
+
+                    # Tangent plane constraint (same as sphere)
+                    A_row = s.T @ Jp
+                    b_scalar = ((s.T @ (o_prime - p_world)) / (self.dt * 2))
+                    self.add_constraint(A_row, b_scalar)
