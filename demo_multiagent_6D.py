@@ -6,7 +6,6 @@ Demo using MultiAgentPowerRL for diverse exploration.
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from joblib import Parallel, delayed
 
 from scripts.dmp import MixturePD
 from scripts.env_reaching import ReachingEnv
@@ -74,7 +73,6 @@ def main(seed=1, doAnimation=True, export=False):
         best_trajs_per_agent = []
         best_returns_per_agent = []
 
-        # --- Parallel rollout for all agents at once ---
         def rollout_job(agent_id):
             agent_local = population.agents[agent_id]
             params_k = agent_local.sample_policy()
