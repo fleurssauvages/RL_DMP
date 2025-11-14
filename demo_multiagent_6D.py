@@ -76,9 +76,16 @@ def main(seed=1, doAnimation=True, export=False):
         def rollout_job(agent_id):
             agent_local = population.agents[agent_id]
             params_k = agent_local.sample_policy()
-            traj = env.simulate_numba(params_k)
-            Rk = env.rollout_return_using_numba(traj, w_demo=weight_demo, w_goal=weight_goal,
-                                    w_jerk=weight_jerk, w_end_vel=weight_end_vel)
+            # traj = env.simulate_numba(params_k)
+            # Rk = env.rollout_return_using_numba(traj, w_demo=weight_demo, w_goal=weight_goal,
+            #                         w_jerk=weight_jerk, w_end_vel=weight_end_vel)
+            traj, Rk = env.simulate_and_return_traj_numba(
+                params_k,
+                w_demo=weight_demo,
+                w_goal=weight_goal,
+                w_jerk=weight_jerk,
+                w_end_vel=weight_end_vel,
+            )
             return agent_id, params_k, traj, Rk
 
         # Create one job per (agent, rollout)
@@ -150,7 +157,7 @@ def main(seed=1, doAnimation=True, export=False):
             # Plot all agent rollouts (faint, colored)
             cmap = plt.cm.get_cmap("nipy_spectral", n_agents)
             for agent_id, params_k, traj, Rk in results_all:
-                xs, ys, zs = traj['x'][:, 0], traj['x'][:, 1], traj['x'][:, 2]
+                xs, ys, zs = traj[:, 0], traj[:, 1], traj[:, 2]
                 ax_traj.plot(xs, ys, zs, color=cmap(agent_id), alpha=0.3)
                 
             # === plot best trajectory per agent ===

@@ -6,90 +6,7 @@ Simulates only end-effector kinematics controlled by mixture-of-PD DMP.
 import numpy as np
 from scipy.interpolate import interp1d
 from numba import njit, set_num_threads, prange
-
-@njit(cache=True)
-def rollout_numba(Kp, X, centers, sigmas, V, duration, dt,
-                  start_x, start_xdot, timesteps,
-                  xs, xdots, xddots, acc,
-                  obs_centers, obs_radii):
-    D = start_x.shape[0]
-    K = centers.shape[0]
-
-    x = start_x.copy()
-    x_dot = start_xdot.copy()
-    collided = False
-
-    exps = np.empty(K)
-    hs = np.empty(K)
-    diff = np.empty((K, D))
-    acc = np.empty(D)
-
-    for i in range(timesteps):
-        t = i * dt
-
-        # compute exps & hs
-        sum_exps = 0.0
-        for k in range(K):
-            num = t - centers[k]
-            tmp = -0.5 * (num * num) / (sigmas[k] + 1e-12)
-            exps[k] = np.exp(tmp)
-            sum_exps += exps[k]
-        denom = sum_exps + 1e-12
-        for k in range(K):
-            hs[k] = exps[k] / denom
-
-        # diff = X - x
-        for k in range(K):
-            for d in range(D):
-                diff[k, d] = X[k, d] - x[d]
-
-        # acc = sum_k hs[k] * (Kp[k] @ diff[k] - V @ x_dot)
-        for d in range(D):
-            acc[d] = 0.0
-
-        # precompute V @ x_dot once
-        Vx = np.empty(D)
-        for r in range(D):
-            s = 0.0
-            for c in range(D):
-                s += V[r, c] * x_dot[c]
-            Vx[r] = s
-
-        for k in range(K):
-            # Kp[k] @ diff[k]
-            Kp_diff = np.empty(D)
-            for r in range(D):
-                s = 0.0
-                for c in range(D):
-                    s += Kp[k, r, c] * diff[k, c]
-                Kp_diff[r] = s
-
-            for d in range(D):
-                acc[d] += hs[k] * (Kp_diff[d] - Vx[d])
-
-        # integrate
-        for d in range(D):
-            x_dot[d] += acc[d] * dt
-            x[d] += x_dot[d] * dt
-
-        xs[i] = x
-        xdots[i] = x_dot
-        xddots[i] = acc
-
-        # collision check (no sqrt)
-        if obs_centers is not None and obs_radii is not None and not collided:
-            n_obs = obs_centers.shape[0]
-            for k in range(n_obs):
-                dx = x[0] - obs_centers[k, 0]
-                dy = x[1] - obs_centers[k, 1]
-                dz = x[2] - obs_centers[k, 2]
-                dist_sq = dx*dx + dy*dy + dz*dz
-                r_sq = obs_radii[k] * obs_radii[k]
-                if dist_sq <= r_sq:
-                    collided = True
-                    break
-
-    return xs, xdots, xddots, collided
+import math
 
 class ReachingEnv:
     def __init__(self, dmp: object, dt=0.01,
@@ -297,6 +214,133 @@ class ReachingEnv:
                                     w_jerk,
                                     w_end_vel)
         return R_total
+    
+    def simulate_and_return_traj_numba(self, params,
+                                   start_x=None,
+                                   start_xdot=None,
+                                   w_demo=0.5, w_goal=0.5,
+                                   w_jerk=0.005, w_end_vel=0.01):
+
+        self.dmp.set_flat_params(params)
+        D = self.dmp.D
+
+        x0 = np.zeros(D) if start_x is None else np.array(start_x)
+        v0 = np.zeros(D) if start_xdot is None else np.array(start_xdot)
+
+        Kp = np.stack(self.dmp.Kp)
+        X = np.stack(self.dmp.X)
+        centers = self.dmp.centers
+        sigmas = self.dmp.sigmas
+        V = self.dmp.V
+
+        T = int(np.ceil(self.dmp.duration / self.dt))
+
+        if self.demo_resampled is None:
+            demo_arr = np.empty((0, D))
+        else:
+            demo_arr = self.demo_resampled
+
+        if self.obstacles:
+            obs_centers = np.array([o['center'] for o in self.obstacles])
+            obs_radii = np.array([o['radius'] for o in self.obstacles])
+        else:
+            obs_centers = np.zeros((0, 3))
+            obs_radii = np.zeros((0,))
+
+        traj, R_total, collided = rollout_and_return_numba(
+            Kp, X, centers, sigmas, V,
+            self.dmp.duration, self.dt,
+            x0, v0, T,
+            obs_centers, obs_radii,
+            demo_arr, self.goal,
+            w_demo, w_goal, w_jerk, w_end_vel
+        )
+
+        return traj, float(R_total)
+
+@njit(cache=True)
+def rollout_numba(Kp, X, centers, sigmas, V, duration, dt,
+                  start_x, start_xdot, timesteps,
+                  xs, xdots, xddots, acc,
+                  obs_centers, obs_radii):
+    D = start_x.shape[0]
+    K = centers.shape[0]
+
+    x = start_x.copy()
+    x_dot = start_xdot.copy()
+    collided = False
+
+    exps = np.empty(K)
+    hs = np.empty(K)
+    diff = np.empty((K, D))
+    acc = np.empty(D)
+
+    for i in range(timesteps):
+        t = i * dt
+
+        # compute exps & hs
+        sum_exps = 0.0
+        for k in range(K):
+            num = t - centers[k]
+            tmp = -0.5 * (num * num) / (sigmas[k] + 1e-12)
+            exps[k] = np.exp(tmp)
+            sum_exps += exps[k]
+        denom = sum_exps + 1e-12
+        for k in range(K):
+            hs[k] = exps[k] / denom
+
+        # diff = X - x
+        for k in range(K):
+            for d in range(D):
+                diff[k, d] = X[k, d] - x[d]
+
+        # acc = sum_k hs[k] * (Kp[k] @ diff[k] - V @ x_dot)
+        for d in range(D):
+            acc[d] = 0.0
+
+        # precompute V @ x_dot once
+        Vx = np.empty(D)
+        for r in range(D):
+            s = 0.0
+            for c in range(D):
+                s += V[r, c] * x_dot[c]
+            Vx[r] = s
+
+        for k in range(K):
+            # Kp[k] @ diff[k]
+            Kp_diff = np.empty(D)
+            for r in range(D):
+                s = 0.0
+                for c in range(D):
+                    s += Kp[k, r, c] * diff[k, c]
+                Kp_diff[r] = s
+
+            for d in range(D):
+                acc[d] += hs[k] * (Kp_diff[d] - Vx[d])
+
+        # integrate
+        for d in range(D):
+            x_dot[d] += acc[d] * dt
+            x[d] += x_dot[d] * dt
+
+        xs[i] = x
+        xdots[i] = x_dot
+        xddots[i] = acc
+
+        # collision check (no sqrt)
+        if obs_centers is not None and obs_radii is not None and not collided:
+            n_obs = obs_centers.shape[0]
+            for k in range(n_obs):
+                dx = x[0] - obs_centers[k, 0]
+                dy = x[1] - obs_centers[k, 1]
+                dz = x[2] - obs_centers[k, 2]
+                dist_sq = dx*dx + dy*dy + dz*dz
+                r_sq = obs_radii[k] * obs_radii[k]
+                if dist_sq <= r_sq:
+                    collided = True
+                    break
+
+    return xs, xdots, xddots, collided
 
 @njit(cache=True)
 def rollout_return_numba(xs,
@@ -413,3 +457,202 @@ def rollout_return_numba(xs,
 
     return R_total
 
+@njit(cache=True)
+def rollout_and_return_numba(Kp, X, centers, sigmas, V, duration, dt,
+                             start_x, start_xdot, timesteps,
+                             obs_centers, obs_radii,
+                             demo_resampled, goal,
+                             w_demo, w_goal, w_jerk, w_end_vel):
+    """
+    Fused version: integrates dynamics AND accumulates reward in one pass.
+
+    Parameters are the same as your old rollout + reward, but:
+    - We accumulate all costs on the fly.
+    - We only track x (position), x_dot (velocity), and acc (acceleration).
+    """
+
+    D = start_x.shape[0]
+    K = centers.shape[0]
+
+    xs     = np.zeros((timesteps, D))
+    xdots  = np.zeros((timesteps, D))
+    xddots = np.zeros((timesteps, D))
+
+    x = start_x.copy()
+    x_dot = start_xdot.copy()
+    acc = np.zeros(D)
+
+    x = start_x.copy()
+    x_dot = start_xdot.copy()
+    acc = np.zeros(D)
+
+    collided = False
+
+    # pre-allocate stuff you are already using in rollout_numba
+    exps = np.empty(K)
+    hs = np.empty(K)
+    diff = np.empty((K, D))
+
+    # --- reward accumulators ---
+    # path matching
+    path_acc = 0.0
+    has_demo = demo_resampled.shape[0] == timesteps
+
+    # obstacle distance / collision
+    has_obs = obs_centers.shape[0] > 0
+    min_d = 1e9  # min distance-to-surface
+
+    # jerk
+    jerk_acc_cost = 0.0
+    have_prev_acc = False
+    prev_acc = np.zeros(D)
+
+    # v0, vT (v0 is start_xdot, vT will be final x_dot)
+    # v0 is known already; vT will be x_dot after the last step
+
+    for i in range(timesteps):
+        t = i * dt
+
+        # compute exps & hs
+        sum_exps = 0.0
+        for k in range(K):
+            num = t - centers[k]
+            tmp = -0.5 * (num * num) / (sigmas[k] + 1e-12)
+            exps[k] = np.exp(tmp)
+            sum_exps += exps[k]
+        denom = sum_exps + 1e-12
+        for k in range(K):
+            hs[k] = exps[k] / denom
+
+        # diff = X - x
+        for k in range(K):
+            for d in range(D):
+                diff[k, d] = X[k, d] - x[d]
+
+        # acc = sum_k hs[k] * (Kp[k] @ diff[k] - V @ x_dot)
+        for d in range(D):
+            acc[d] = 0.0
+
+        # precompute V @ x_dot once
+        Vx = np.empty(D)
+        for r in range(D):
+            s = 0.0
+            for c in range(D):
+                s += V[r, c] * x_dot[c]
+            Vx[r] = s
+
+        for k in range(K):
+            # Kp[k] @ diff[k]
+            Kp_diff = np.empty(D)
+            for r in range(D):
+                s = 0.0
+                for c in range(D):
+                    s += Kp[k, r, c] * diff[k, c]
+                Kp_diff[r] = s
+
+            for d in range(D):
+                acc[d] += hs[k] * (Kp_diff[d] - Vx[d])
+
+        # integrate
+        for d in range(D):
+            x_dot[d] += acc[d] * dt
+            x[d] += x_dot[d] * dt
+
+        # collision check (no sqrt)
+        if obs_centers is not None and obs_radii is not None and not collided:
+            n_obs = obs_centers.shape[0]
+            for k in range(n_obs):
+                dx = x[0] - obs_centers[k, 0]
+                dy = x[1] - obs_centers[k, 1]
+                dz = x[2] - obs_centers[k, 2]
+                dist_sq = dx*dx + dy*dy + dz*dz
+                r_sq = obs_radii[k] * obs_radii[k]
+                if dist_sq <= r_sq:
+                    collided = True
+                    break
+
+        # --- jerk accumulation from acceleration ---
+        if have_prev_acc:
+            mag_sq = 0.0
+            for d in range(D):
+                j = (acc[d] - prev_acc[d]) / dt
+                mag_sq += j * j
+            jerk_acc_cost += mag_sq
+        else:
+            have_prev_acc = True
+
+        for d in range(D):
+            prev_acc[d] = acc[d]
+
+        # --- path matching term (demo) ---
+        if has_demo:
+            diff_sq = 0.0
+            for d in range(D):
+                tmp = x[d] - demo_resampled[i, d]
+                diff_sq += tmp * tmp
+            dist = math.sqrt(diff_sq)
+            path_acc += math.exp(-dist)
+
+        # --- obstacle distance / collision ---
+        if has_obs:
+            for o in range(obs_centers.shape[0]):
+                radius = obs_radii[o]
+                dist_sq = 0.0
+                # only first 3 dims used for obstacle distance
+                for d in range(3):
+                    tmp = x[d] - obs_centers[o, d]
+                    dist_sq += tmp * tmp
+                dist = math.sqrt(dist_sq)
+                d_surface = dist - radius
+                if d_surface < min_d:
+                    min_d = d_surface
+                if d_surface <= 0.0:
+                    collided = True
+
+        xs[i] = x
+        xdots[i] = x_dot
+        xddots[i] = acc
+
+    # --- Path score ---
+    if has_demo and timesteps > 0:
+        path_score = path_acc / timesteps
+    else:
+        path_score = 0.0
+
+    # --- Final goal term ---
+    final_dist_sq = 0.0
+    for d in range(D):
+        tmp = x[d] - goal[d]
+        final_dist_sq += tmp * tmp
+    final_dist = math.sqrt(final_dist_sq)
+    goal_score = math.exp(-5.0*final_dist)
+
+    R_total = w_demo * path_score + w_goal * goal_score
+
+    # --- Collision penalty (same as rollout_return_numba) ---
+    if has_obs and min_d < 0.0:
+        depth = -min_d
+        if depth > 0.2:
+            depth = 0.2
+        R_total -= 5.0 * depth
+
+    # --- Jerk penalty (same normalization as numba version) ---
+    if timesteps > 1 and have_prev_acc:
+        Tj = timesteps - 1
+        jerk_cost = (jerk_acc_cost / Tj) / timesteps
+    else:
+        jerk_cost = 0.0
+
+    R_total -= w_jerk * jerk_cost
+
+    # --- Initial & final velocity penalty ---
+    v0_sq = 0.0
+    vT_sq = 0.0
+    for d in range(D):
+        v0_sq += start_xdot[d] * start_xdot[d]
+        vT_sq += x_dot[d] * x_dot[d]
+    vel_penalty = v0_sq + vT_sq
+
+    R_total -= w_end_vel * vel_penalty
+
+    return xs, R_total, collided
