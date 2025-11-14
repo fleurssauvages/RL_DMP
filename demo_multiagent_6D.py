@@ -233,4 +233,4 @@ def main(seed=1, doAnimation=True, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=6, doAnimation=False, export=False)
+    main(seed=6, doAnimation=True, export=False)
