@@ -6,38 +6,90 @@ Simulates only end-effector kinematics controlled by mixture-of-PD DMP.
 import numpy as np
 from scipy.interpolate import interp1d
 from numba import njit, set_num_threads, prange
-set_num_threads(1) # Avoid overwrite when running parallel jobs
 
-@njit(cache=True, parallel=False) # Parallel makes iterations faster but first call slower, choose depending on usage context
-def rollout_numba(Kp, X, centers, sigmas, V, duration, dt, start_x, start_xdot):
+@njit(cache=True)
+def rollout_numba(Kp, X, centers, sigmas, V, duration, dt,
+                  start_x, start_xdot, timesteps,
+                  xs, xdots, xddots, acc,
+                  obs_centers, obs_radii):
     D = start_x.shape[0]
     K = centers.shape[0]
-    timesteps = int(np.ceil(duration / dt))
-    xs = np.zeros((timesteps, D))
-    xdots = np.zeros_like(xs)
-    xddots = np.zeros_like(xs)
-    
+
     x = start_x.copy()
     x_dot = start_xdot.copy()
-    
-    for i in prange(timesteps):
+    collided = False
+
+    exps = np.empty(K)
+    hs = np.empty(K)
+    diff = np.empty((K, D))
+    acc = np.empty(D)
+
+    for i in range(timesteps):
         t = i * dt
-        exps = np.exp(-0.5 * ((t - centers)**2) / (sigmas + 1e-12))
-        hs = exps / (np.sum(exps) + 1e-12)
-        
-        # Vectorized acceleration calculation
-        diff = X - x
-        acc = np.zeros(D)
-        for k in prange(K):
-            acc += hs[k] * (Kp[k] @ diff[k] - V @ x_dot)
-        
-        x_dot += acc * dt
-        x += x_dot * dt
+
+        # compute exps & hs
+        sum_exps = 0.0
+        for k in range(K):
+            num = t - centers[k]
+            tmp = -0.5 * (num * num) / (sigmas[k] + 1e-12)
+            exps[k] = np.exp(tmp)
+            sum_exps += exps[k]
+        denom = sum_exps + 1e-12
+        for k in range(K):
+            hs[k] = exps[k] / denom
+
+        # diff = X - x
+        for k in range(K):
+            for d in range(D):
+                diff[k, d] = X[k, d] - x[d]
+
+        # acc = sum_k hs[k] * (Kp[k] @ diff[k] - V @ x_dot)
+        for d in range(D):
+            acc[d] = 0.0
+
+        # precompute V @ x_dot once
+        Vx = np.empty(D)
+        for r in range(D):
+            s = 0.0
+            for c in range(D):
+                s += V[r, c] * x_dot[c]
+            Vx[r] = s
+
+        for k in range(K):
+            # Kp[k] @ diff[k]
+            Kp_diff = np.empty(D)
+            for r in range(D):
+                s = 0.0
+                for c in range(D):
+                    s += Kp[k, r, c] * diff[k, c]
+                Kp_diff[r] = s
+
+            for d in range(D):
+                acc[d] += hs[k] * (Kp_diff[d] - Vx[d])
+
+        # integrate
+        for d in range(D):
+            x_dot[d] += acc[d] * dt
+            x[d] += x_dot[d] * dt
+
         xs[i] = x
         xdots[i] = x_dot
         xddots[i] = acc
-        
-    return xs, xdots, xddots      
+
+        # collision check (no sqrt)
+        if obs_centers is not None and obs_radii is not None and not collided:
+            n_obs = obs_centers.shape[0]
+            for k in range(n_obs):
+                dx = x[0] - obs_centers[k, 0]
+                dy = x[1] - obs_centers[k, 1]
+                dz = x[2] - obs_centers[k, 2]
+                dist_sq = dx*dx + dy*dy + dz*dz
+                r_sq = obs_radii[k] * obs_radii[k]
+                if dist_sq <= r_sq:
+                    collided = True
+                    break
+
+    return xs, xdots, xddots, collided
 
 class ReachingEnv:
     def __init__(self, dmp: object, dt=0.01,
@@ -132,15 +184,20 @@ class ReachingEnv:
         sigmas = self.dmp.sigmas
         V = self.dmp.V
 
-        xs, xdots, xddots = rollout_numba(Kp, X, centers, sigmas, V,
-                                        self.dmp.duration, self.dt, x0, v0)
-
-        collided = False
+        timesteps = int(np.ceil(self.dmp.duration / self.dt))
+        xs = np.zeros((timesteps, D))
+        xdots = np.zeros_like(xs)
+        xddots = np.zeros_like(xs)
+        acc = np.zeros(D)
         if self.obstacles:
-            obs_centers = np.array([ob['center'] for ob in self.obstacles])
-            obs_radii = np.array([ob['radius'] for ob in self.obstacles])
-            dists = np.linalg.norm(xs[:, None, :3] - obs_centers[None, :, :3], axis=2)
-            collided = np.any(dists <= obs_radii)
+            obs_centers = np.array([ob['center'] for ob in self.obstacles], dtype=np.float32)
+            obs_radii = np.array([ob['radius'] for ob in self.obstacles], dtype=np.float32)
+        else:
+            obs_centers = None
+            obs_radii = None
+
+        xs, xdots, xddots, collided = rollout_numba(Kp, X, centers, sigmas, V,
+                                        self.dmp.duration, self.dt, x0, v0, timesteps, xs, xdots, xddots, acc, obs_centers, obs_radii)
 
         traj = {'t': np.linspace(0, self.dmp.duration, xs.shape[0]),
                 'x': xs, 'xdot': xdots, 'xddot': xddots, 'collided': collided}
@@ -199,3 +256,160 @@ class ReachingEnv:
         R_total -= w_end_vel * vel_penalty
 
         return R_total
+    
+    def rollout_return_using_numba(self, traj, w_demo=0.5, w_goal=0.5, w_jerk=0.005, w_end_vel=0.01):
+        xs = traj['x']      # (T, D)
+        xddot = traj.get('xddot', None)
+        xdot = traj.get('xdot', None)
+        collided = bool(traj.get('collided', False))
+
+        # Ensure we always pass arrays (numba-friendly shapes)
+        if xddot is None:
+            xddot = np.empty((0, xs.shape[1]), dtype=xs.dtype)
+        if xdot is None:
+            xdot = np.empty((0, xs.shape[1]), dtype=xs.dtype)
+
+        # demo_resampled: either (T, D) or 0-length
+        if self.demo_resampled is None:
+            demo_arr = np.empty((0, xs.shape[1]), dtype=xs.dtype)
+        else:
+            demo_arr = self.demo_resampled
+
+        # obstacles → centers & radii arrays
+        if self.obstacles:
+            obs_centers = np.array([ob['center'] for ob in self.obstacles], dtype=xs.dtype)
+            obs_radii = np.array([ob['radius'] for ob in self.obstacles], dtype=xs.dtype)
+        else:
+            obs_centers = np.empty((0, 3), dtype=xs.dtype)
+            obs_radii = np.empty((0,), dtype=xs.dtype)
+
+        R_total = rollout_return_numba(xs,
+                                    xddot,
+                                    xdot,
+                                    demo_arr,
+                                    self.goal.astype(xs.dtype),
+                                    self.dt,
+                                    collided,
+                                    obs_centers,
+                                    obs_radii,
+                                    w_demo,
+                                    w_goal,
+                                    w_jerk,
+                                    w_end_vel)
+        return R_total
+
+@njit(cache=True)
+def rollout_return_numba(xs,
+                        xddot,
+                        xdot,
+                        demo_resampled,
+                        goal,
+                        dt,
+                        collided,
+                        obs_centers,
+                        obs_radii,
+                        w_demo,
+                        w_goal,
+                        w_jerk,
+                        w_end_vel):
+    """
+    Numba version of the reward. All inputs must be arrays/scalars, no dicts or objects.
+    xs: (T, D)
+    xddot: (T, D) or (0, D) if not available
+    xdot: (T, D) or (0, D) if not available
+    demo_resampled: (T, D) or (0, D) if no demo
+    goal: (D,)
+    obs_centers: (N_obs, 3) or (0, 3) if no obstacles
+    obs_radii: (N_obs,)
+    """
+    T = xs.shape[0]
+
+    # --- Path matching term ---
+    path_score = 0.0
+    if demo_resampled.shape[0] == T:
+        acc = 0.0
+        for t in range(T):
+            # ||x_t - demo_t||
+            diff_sq = 0.0
+            for d in range(xs.shape[1]):
+                tmp = xs[t, d] - demo_resampled[t, d]
+                diff_sq += tmp * tmp
+            diff = np.sqrt(diff_sq)
+            acc += np.exp(-diff)
+        path_score = acc / T
+
+    # --- Final goal term ---
+    D = xs.shape[1]
+    final_dist_sq = 0.0
+    for d in range(D):
+        tmp = xs[T - 1, d] - goal[d]
+        final_dist_sq += tmp * tmp
+    final_dist = np.sqrt(final_dist_sq)
+    goal_score = np.exp(-5.0 * final_dist)
+
+    R_total = w_demo * path_score + w_goal * goal_score
+
+    # --- Collision penalty ---
+    if collided and obs_centers.shape[0] > 0:
+        # min over obstacles of (min over time of (dist_to_surface))
+        # dist_to_surface = ||x[:3] - center|| - radius
+        min_d = 1e9
+        for o in range(obs_centers.shape[0]):
+            radius = obs_radii[o]
+            # min over time
+            for t in range(T):
+                # only first 3 dims used for obstacle distance
+                dist_sq = 0.0
+                for d in range(3):
+                    tmp = xs[t, d] - obs_centers[o, d]
+                    dist_sq += tmp * tmp
+                dist = np.sqrt(dist_sq)
+                d_surface = dist - radius
+                if d_surface < min_d:
+                    min_d = d_surface
+
+        # penalty = 5 * clip(-min_d, 0, 0.2)
+        if min_d < 0.0:
+            depth = -min_d
+            if depth > 0.2:
+                depth = 0.2
+            R_total -= 5.0 * depth
+
+    # --- Jerk penalty ---
+    jerk_cost = 0.0
+    n_xddot = xddot.shape[0]
+    if n_xddot > 2:
+        # simple finite-difference jerk along time
+        # jerk[t] ~ (xddot[t+1] - xddot[t]) / dt   (you can also do higher-order)
+        Tj = n_xddot - 1
+        acc_cost = 0.0
+        for t in range(Tj):
+            mag_sq = 0.0
+            for d in range(D):
+                j = (xddot[t + 1, d] - xddot[t, d]) / dt
+                mag_sq += j * j
+            acc_cost += mag_sq
+        jerk_cost = acc_cost / Tj  # mean over time
+        # normalize to trajectory length (like your original intent)
+        jerk_cost = jerk_cost / T
+
+    R_total -= w_jerk * jerk_cost
+
+    # --- Initial & final velocity penalty ---
+    vel_penalty = 0.0
+    if xdot.shape[0] >= 1:
+        v0 = xdot[0]
+        vT = xdot[xdot.shape[0] - 1]
+
+        v0_sq = 0.0
+        vT_sq = 0.0
+        for d in range(D):
+            v0_sq += v0[d] * v0[d]
+            vT_sq += vT[d] * vT[d]
+
+        vel_penalty = v0_sq + vT_sq
+
+    R_total -= w_end_vel * vel_penalty
+
+    return R_total
+

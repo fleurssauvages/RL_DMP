@@ -18,7 +18,7 @@ def main(seed=1, doAnimation=True, export=False):
     
     # --- Parameters ---
     D, K = 6, 4
-    duration, dt = 1.0, 0.01
+    duration, dt = 1.0, 0.02
     weight_demo, weight_goal = 0.05, 0.95
     weight_jerk, weight_end_vel = 0.005, 0.05
     n_iterations, rollouts_per_agent = 120, 4
@@ -77,7 +77,7 @@ def main(seed=1, doAnimation=True, export=False):
             agent_local = population.agents[agent_id]
             params_k = agent_local.sample_policy()
             traj = env.simulate_numba(params_k)
-            Rk = env.rollout_return(traj, w_demo=weight_demo, w_goal=weight_goal,
+            Rk = env.rollout_return_using_numba(traj, w_demo=weight_demo, w_goal=weight_goal,
                                     w_jerk=weight_jerk, w_end_vel=weight_end_vel)
             return agent_id, params_k, traj, Rk
 
@@ -93,8 +93,7 @@ def main(seed=1, doAnimation=True, export=False):
         # Assign results per agent
         for agent_id, params_k, traj, Rk in results_all:
             agent = population.agents[agent_id]
-            agent.history_params.append(params_k)
-            agent.history_returns.append(Rk)
+            agent.add_rollout(params_k, Rk)
             rollouts_data.append((agent_id, traj, Rk))
             all_returns.append(Rk)
 
@@ -104,6 +103,9 @@ def main(seed=1, doAnimation=True, export=False):
         population.update_exploration(exploration_std * (decay ** it))
         population.update_diversity_strength(population.diversity_strength * decay)
 
+        t1 = time.time()
+        iter_times[it] = time.time() - t0
+        
         # Find best-performing agent and trajectory
         best_idx, best_agent = population.best_agent()
         best_R_iter = np.max(best_agent.history_returns)
@@ -112,30 +114,28 @@ def main(seed=1, doAnimation=True, export=False):
             best_traj = env.simulate_numba(best_agent.theta)
             dmp.set_flat_params(best_agent.theta)
 
-        t1 = time.time()
-        iter_times[it] = time.time() - t0
         if doAnimation:
             print(f"Iteration {it+1}/{n_iterations} | Best Agent {best_idx} | Best Return {best_R:.3f}")
             print(f"Iteration time: {t1 - t0:.3f}s")
-        
+
         # --- Compute best traj/return per agent ---
         best_trajs_per_agent = []
         best_returns_per_agent = []
 
         for agent_id, agent in enumerate(population.agents):
             if len(agent.history_returns) == 0:
-                # safety fallback (should not happen)
                 best_trajs_per_agent.append(None)
                 best_returns_per_agent.append(-np.inf)
                 continue
 
-            best_idx_local = np.argmax(agent.history_returns)
+            history_R = np.array(agent.history_returns)
+            best_idx_local = np.argmax(history_R)
             best_params = agent.history_params[best_idx_local]
-            best_returns_per_agent.append(agent.history_returns[best_idx_local])
+            best_returns_per_agent.append(history_R[best_idx_local])
 
-            # Re-simulate to get best trajectory (fast with numba)
             best_traj = env.simulate_numba(best_params)
             best_trajs_per_agent.append(best_traj)
+
 
         # --- Visualization ---
         if doAnimation:
@@ -213,7 +213,7 @@ def main(seed=1, doAnimation=True, export=False):
             plt.pause(0.01)
 
     print("\n Multi-agent training complete.")
-    print(f"Median iteration time: {np.median(iter_times):.4f}s")
+    print(f"Median iteration time: {np.median(iter_times):.6f}s")
     print(f"Median framerate: {1.0/np.median(iter_times):.2f} it/s")
     if doAnimation:
         plt.show()
@@ -233,4 +233,4 @@ def main(seed=1, doAnimation=True, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=1, doAnimation=True, export=False)
+    main(seed=6, doAnimation=False, export=False)
