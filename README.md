@@ -135,8 +135,7 @@ pip install pybullet
 ---
 
 ### 🔹 Flow control, a force pulls the user towards the trajectory when the radius is small (Pybullet)
-<img src="images/flow_constrained.gif" width="800" alt="Flow control>
-
+<img src="images/flow_constrained.gif" width="800" alt="Tube const">
 ---
 
 </div>
