@@ -100,6 +100,10 @@ pip install pybullet
 ├── demo_multiagent_6D.py           # Extension with multiple agents
 ├── replay_pybullet.py              # Replay trajectory on robot
 ├── replay_pybullet_multi.py        # Replay multiple trajectory on robot successively
+├── path_constrained_demo.py        # Tube constraints for user controlled position with a Space Mouse Joystick
+├── path_constrained_pybullet.py    # Same in Pybullet
+├── flow_controlled_demo.py         # Adds a flow to the tube constrained, plot in Matplotlib
+├── flow_controlled_pybullet.py     # Same in Pybullet
 ├── README.md                       # Project documentation
 └── LICENSE                         # License file
 ```
@@ -122,6 +126,16 @@ pip install pybullet
 
 ### 🔹 Multi Agent RL
 <img src="images/RL_multi.gif" width="800" alt="RL Multi">
+
+---
+
+### 🔹 Hard Tube Constrainsts with User Joystick Input
+<img src="images/hard_constrained.gif" width="800" alt="Tube const">
+
+---
+
+### 🔹 Flow control, a force pulls the user towards the trajectory when the radius is small (Pybullet)
+<img src="images/flow_constrained.gif" width="800" alt="Flow control>
 
 ---
 
