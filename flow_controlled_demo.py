@@ -421,6 +421,8 @@ def main():
     # Motion gains
     trans_gain = 0.1  # [m/s] per full deflection
     rot_gain = 1.5   # [rad/s] per full deflection
+    gain_attraction = 0.1  # [m/s] toward tube center if outside
+    dist_activation_correction = 0.05  # [m] distance threshold to start applying correction
     loop_dt = 0.05    # [s] loop period
 
     # Main loop: update current position based on joystick, update plot
@@ -481,6 +483,21 @@ def main():
             tube_center = centers_t[best_i]
             tube_radius = radii_t[best_i]
 
+            # Compute distance to tube center
+            d = np.sqrt(best_dist)
+
+            # Normalize distance for weighting
+            x = 1.0 - np.clip(d / dist_activation_correction, 0.0, 1.0)
+
+            # Smoothstep activation (continuous 0→1)
+            w = x * x * (3 - 2 * x)   # 3x^2 – 2x^3
+
+            # Radius-dependent attraction
+            if np.linalg.norm(v) > 1e-6:
+                correction = w * gain_attraction * (tube_center - current_pos) / (tube_radius + 1e-6)
+                current_pos += correction * dt_loop
+
+            # Enforce tube boundary
             d = current_pos - tube_center
             dist = np.linalg.norm(d)
 

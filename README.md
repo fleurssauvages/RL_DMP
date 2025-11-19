@@ -68,11 +68,17 @@ pip install pybullet
   ```
   Each trajectory is replayed succesively. Note: this could be use to evaluate which trajectories are actually replayable with the full robot model and controller.
 
-  - **Example coupled with Space Mouse Joystick**  
+  - **Example coupled with Space Mouse Joystick: hard constraint**  
   ```bash
   python path_constrained_demo.py
   ```
-  Generate acceptables zones as "tubes" around the previously exported trajectories. These tubes can be used to then control a 6D desired position, for example in this example with a 6D Space Mouse. The same script is also implemented with Pybullet and the full robot model.
+  Generate acceptables zones as "tubes" around the previously exported trajectories. These tubes can be used to then control a 6D desired position with hard limits, for example in this example with a 6D Space Mouse. The same script is also implemented with Pybullet and the full robot model.
+
+    - **Example coupled with Space Mouse Joystick: flowed control**  
+  ```bash
+  python flow_controlled_demo.py
+  ```
+  How top of the previous hard constraints, when the joystick is active and the radius is small (i.e we are close to obstacles) we pull the position towards the closest trajectory. The same script is also implemented with Pybullet and the full robot model.
 ---
 
 ## 📂 Project Structure
