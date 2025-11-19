@@ -70,7 +70,7 @@ pip install pybullet
 
   - **Example coupled with Space Mouse Joystick**  
   ```bash
-  python shared_controller_demo.py
+  python path_constrained_demo.py
   ```
   Generate acceptables zones as "tubes" around the previously exported trajectories. These tubes can be used to then control a 6D desired position, for example in this example with a 6D Space Mouse. The same script is also implemented with Pybullet and the full robot model.
 ---
