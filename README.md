@@ -67,6 +67,12 @@ pip install pybullet
   python replay_pybullet_multi.py
   ```
   Each trajectory is replayed succesively. Note: this could be use to evaluate which trajectories are actually replayable with the full robot model and controller.
+
+  - **Example coupled with Space Mouse Joystick**  
+  ```bash
+  python shared_controller_demo.py
+  ```
+  Generate acceptables zones as "tubes" around the previously exported trajectories. These tubes can be used to then control a 6D desired position, for example in this example with a 6D Space Mouse. The same script is also implemented with Pybullet and the full robot model.
 ---
 
 ## 📂 Project Structure
