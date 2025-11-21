@@ -459,10 +459,10 @@ def main():
 
     # ----------------- Main teleop loop -----------------
     # Motion gains
-    trans_gain = 0.3   # [m/s] per full deflection
+    trans_gain = 0.6   # [m/s] per full deflection
     rot_gain = 1.5     # [rad/s] per full deflection
     loop_dt = dt       # controller loop time
-    gain_attraction = 0.5  # [m/s] toward tube center if outside
+    gain_attraction = 1.0  # [m/s] toward tube center if outside
     dist_activation_correction = 0.08  # [m] distance threshold to start applying correction
 
     current_pos = centers_world[0].copy()
@@ -475,8 +475,6 @@ def main():
             t_v = v6[:3] * trans_gain
             r_v = v6[3:] * rot_gain
 
-            # --- integrate translation ---
-            current_pos = current_pos + t_v * loop_dt
             # project onto tube surface
             current_pos = project_point_to_all_tubes(current_pos, tubes_world)
 
@@ -503,19 +501,12 @@ def main():
             if not isInside:
                 current_pos = tube_center + d/dist * tube_radius
 
-            # Compute distance to tube center
-            d = np.linalg.norm(current_pos - tube_center)
-
-            # Normalize distance for weighting
-            x = 1.0 - np.clip(d / dist_activation_correction, 0.0, 1.0)
-
-            # Smoothstep activation (continuous 0→1)
-            w = x * x * (3 - 2 * x)   # 3x^2 – 2x^3
-
             # Radius-dependent attraction
-            if np.linalg.norm(v6[:3]) > 1e-6:
-                correction = w * gain_attraction * (tube_center - current_pos) / (tube_radius + 1e-6)
+            correction = (tube_center - current_pos) * gain_attraction 
+            if np.linalg.norm(v6[:3]) > 1e-6 and tube_radius < dist_activation_correction:
                 current_pos += correction * dt
+
+            current_pos += trans_gain * t_v * dt
 
             # --- integrate rotation (roll-pitch-yaw) ---
             rx, ry, rz = r_v * loop_dt

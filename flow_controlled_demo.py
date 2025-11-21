@@ -422,7 +422,7 @@ def main():
     # Motion gains
     trans_gain = 0.1  # [m/s] per full deflection
     rot_gain = 1.5   # [rad/s] per full deflection
-    gain_attraction = 0.1  # [m/s] toward tube center if outside
+    gain_attraction = 1.0  # [m/s] toward tube center if outside
     dist_activation_correction = 0.1  # [m] distance threshold to start applying correction
     loop_dt = 0.05    # [s] loop period
 
@@ -440,7 +440,6 @@ def main():
             t_v = v[:3]   # translational velocity
             r_v = v[3:]   # rotational velocity
             
-            current_pos += trans_gain * t_v * dt_loop
             rx, ry, rz = r_v * rot_gain * dt_loop
             Rx = np.array([
                 [1, 0, 0],
@@ -459,9 +458,6 @@ def main():
                 [np.sin(rz),  np.cos(rz), 0],
                 [0, 0, 1]
             ])
-
-            # Update cube orientation
-            cube_R = cube_R @ Rz @ Ry @ Rx
 
             # --- Find closest point across ALL tubes ---
             best_dist_per_tube = []
@@ -486,19 +482,15 @@ def main():
             if not isInside:
                 current_pos = tube_center + d/dist * tube_radius
 
-            # Compute distance to tube center
-            d = np.linalg.norm(current_pos - tube_center)
-
-            # Normalize distance for weighting
-            x = 1.0 - np.clip(d / dist_activation_correction, 0.0, 1.0)
-
-            # Smoothstep activation (continuous 0→1)
-            w = x * x * (3 - 2 * x)   # 3x^2 – 2x^3
-
             # Radius-dependent attraction
-            if np.linalg.norm(v) > 1e-6:
-                correction = w * gain_attraction * (tube_center - current_pos) / (tube_radius + 1e-6)
+            correction = (tube_center - current_pos) * gain_attraction 
+            if np.linalg.norm(v) > 1e-6 and tube_radius < dist_activation_correction:
                 current_pos += correction * dt_loop
+
+            current_pos += trans_gain * t_v * dt_loop
+
+            # Apply Motion
+            cube_R = cube_R @ Rz @ Ry @ Rx
 
             # Update scatter position in 3D
             update_cube(current_cube, current_pos, cube_R, size=0.03)
