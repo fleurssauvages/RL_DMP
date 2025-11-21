@@ -507,6 +507,9 @@ def rollout_and_return_numba(Kp, X, centers, sigmas, V, duration, dt,
     have_prev_acc = False
     prev_acc = np.zeros(D)
 
+    Kp_diff = np.empty(D)
+    Vx = np.empty(D)
+
     # v0, vT (v0 is start_xdot, vT will be final x_dot)
     # v0 is known already; vT will be x_dot after the last step
 
@@ -534,7 +537,6 @@ def rollout_and_return_numba(Kp, X, centers, sigmas, V, duration, dt,
             acc[d] = 0.0
 
         # precompute V @ x_dot once
-        Vx = np.empty(D)
         for r in range(D):
             s = 0.0
             for c in range(D):
@@ -543,7 +545,6 @@ def rollout_and_return_numba(Kp, X, centers, sigmas, V, duration, dt,
 
         for k in range(K):
             # Kp[k] @ diff[k]
-            Kp_diff = np.empty(D)
             for r in range(D):
                 s = 0.0
                 for c in range(D):
@@ -591,7 +592,7 @@ def rollout_and_return_numba(Kp, X, centers, sigmas, V, duration, dt,
                 tmp = x[d] - demo_resampled[i, d]
                 diff_sq += tmp * tmp
             dist = math.sqrt(diff_sq)
-            path_acc += math.exp(-dist)
+            path_acc += math.exp(-5 * dist)
 
         # --- obstacle distance / collision ---
         if has_obs:

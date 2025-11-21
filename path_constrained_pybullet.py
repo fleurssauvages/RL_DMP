@@ -117,45 +117,38 @@ def make_obstacles_dmp(duration, dt):
     return obstacles, demo
 
 
-def project_point_to_all_tubes(p, tubes_world):
+def project_point_to_all_tubes(current_pos, tubes_world):
     """
     Project point p onto the surface of the *closest tube* across all tubes.
     tubes_world: list of dicts with:
         'centers': (N,3)
         'radii'  : (N,)
     """
-    p = np.asarray(p).reshape(3,)
-    best_proj = p
-    best_dist = np.inf
+
+    # --- Find closest point across ALL tubes ---
+    best_dist_per_tube = []
+    best_idx_per_tube = []
 
     for tube in tubes_world:
-        centers = tube['centers']
-        radii   = tube['radii']
+        centers_t = tube['centers']
+        d = np.sum((centers_t - current_pos)**2, axis=1)
+        i = np.argmin(d)
+        best_idx_per_tube.append(i)
+        best_dist_per_tube.append(np.sqrt(d[i]))
 
-        # Find closest center index
-        diffs = centers - p
-        dist2 = np.sum(diffs**2, axis=1)
-        i     = np.argmin(dist2)
+    isInside = np.any([tubes_world[t]['radii'][best_idx_per_tube[t]] >= best_dist_per_tube[t] for t in range(len(tubes_world))])
 
-        c_i = centers[i]
-        r_i = radii[i]
+    best_tube = np.argmin(best_dist_per_tube)
+    best_i    = best_idx_per_tube[best_tube]
+    tube_center = tubes_world[best_tube]['centers'][best_i]
+    tube_radius = tubes_world[best_tube]['radii'][best_i]
+    d = current_pos - tube_center
+    dist = np.linalg.norm(d)
+    
+    if not isInside:
+        current_pos = tube_center + d/dist * tube_radius
 
-        d = p - c_i
-        dist = np.linalg.norm(d)
-
-        # If inside tube → projection = p
-        if dist <= r_i:
-            return p.copy()
-
-        # Compute projection on this tube surface
-        proj = c_i + (d / dist) * r_i
-
-        # Keep the closest projection among all tubes
-        if dist - r_i < best_dist:
-            best_dist = dist - r_i
-            best_proj = proj
-
-    return best_proj
+    return current_pos
 
 
 # ============================================================
@@ -474,7 +467,7 @@ def main():
             # --- integrate translation ---
             current_pos = current_pos + t_v * loop_dt
             # project onto tube surface
-            current_pos = current_pos = project_point_to_all_tubes(current_pos, tubes_world)
+            current_pos = project_point_to_all_tubes(current_pos, tubes_world)
 
             # --- integrate rotation (roll-pitch-yaw) ---
             rx, ry, rz = r_v * loop_dt

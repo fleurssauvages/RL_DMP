@@ -385,6 +385,7 @@ def main():
     current_pos = tubes[0]['centers'][0].copy()
     cube_R = np.eye(3) # no rotation
     current_cube = draw_cube(ax, current_pos, size=0.03, color='k')
+    projected_cube = draw_cube(ax, current_pos, size=0.015, color='blue', alpha=0.1)
     ax.legend(loc="upper right")
     fig.canvas.draw()
     plt.pause(0.05)
@@ -422,7 +423,7 @@ def main():
     trans_gain = 0.1  # [m/s] per full deflection
     rot_gain = 1.5   # [rad/s] per full deflection
     gain_attraction = 0.1  # [m/s] toward tube center if outside
-    dist_activation_correction = 0.05  # [m] distance threshold to start applying correction
+    dist_activation_correction = 0.1  # [m] distance threshold to start applying correction
     loop_dt = 0.05    # [s] loop period
 
     # Main loop: update current position based on joystick, update plot
@@ -463,28 +464,30 @@ def main():
             cube_R = cube_R @ Rz @ Ry @ Rx
 
             # --- Find closest point across ALL tubes ---
-            best_dist = np.inf
-            best_tube = None
-            best_i = None
+            best_dist_per_tube = []
+            best_idx_per_tube = []
 
-            for t_idx, tube in enumerate(tubes):
+            for tube in tubes:
                 centers_t = tube['centers']
-                d2 = np.sum((centers_t - current_pos)**2, axis=1)
-                i = np.argmin(d2)
-                if d2[i] < best_dist:
-                    best_dist = d2[i]
-                    best_tube = t_idx
-                    best_i = i
+                d = np.sum((centers_t - current_pos)**2, axis=1)
+                i = np.argmin(d)
+                best_idx_per_tube.append(i)
+                best_dist_per_tube.append(np.sqrt(d[i]))
 
-            # Extract reference from best tube
-            centers_t = tubes[best_tube]['centers']
-            radii_t   = tubes[best_tube]['radii']
+            isInside = np.any([tubes[t]['radii'][best_idx_per_tube[t]] >= best_dist_per_tube[t] for t in range(len(tubes))])
 
-            tube_center = centers_t[best_i]
-            tube_radius = radii_t[best_i]
+            best_tube = np.argmin(best_dist_per_tube)
+            best_i    = best_idx_per_tube[best_tube]
+            tube_center = tubes[best_tube]['centers'][best_i]
+            tube_radius = tubes[best_tube]['radii'][best_i]
+            d = current_pos - tube_center
+            dist = np.linalg.norm(d)
+            
+            if not isInside:
+                current_pos = tube_center + d/dist * tube_radius
 
             # Compute distance to tube center
-            d = np.sqrt(best_dist)
+            d = np.linalg.norm(current_pos - tube_center)
 
             # Normalize distance for weighting
             x = 1.0 - np.clip(d / dist_activation_correction, 0.0, 1.0)
@@ -497,15 +500,9 @@ def main():
                 correction = w * gain_attraction * (tube_center - current_pos) / (tube_radius + 1e-6)
                 current_pos += correction * dt_loop
 
-            # Enforce tube boundary
-            d = current_pos - tube_center
-            dist = np.linalg.norm(d)
-
-            if dist > tube_radius:
-                current_pos = tube_center + d/dist * tube_radius
-
             # Update scatter position in 3D
             update_cube(current_cube, current_pos, cube_R, size=0.03)
+            update_cube(projected_cube, tube_center, np.eye(3), size=0.015)
 
             fig.canvas.draw_idle()
             plt.pause(loop_dt)

@@ -481,28 +481,30 @@ def main():
             current_pos = project_point_to_all_tubes(current_pos, tubes_world)
 
             # --- Find closest point across ALL tubes ---
-            best_dist = np.inf
-            best_tube = None
-            best_i = None
+            best_dist_per_tube = []
+            best_idx_per_tube = []
 
-            for t_idx, tube in enumerate(tubes_world):
+            for tube in tubes_world:
                 centers_t = tube['centers']
-                d2 = np.sum((centers_t - current_pos)**2, axis=1)
-                i = np.argmin(d2)
-                if d2[i] < best_dist:
-                    best_dist = d2[i]
-                    best_tube = t_idx
-                    best_i = i
+                d = np.sum((centers_t - current_pos)**2, axis=1)
+                i = np.argmin(d)
+                best_idx_per_tube.append(i)
+                best_dist_per_tube.append(np.sqrt(d[i]))
 
-            # Extract reference from best tube
-            centers_t = tubes_world[best_tube]['centers']
-            radii_t   = tubes_world[best_tube]['radii']
+            isInside = np.any([tubes_world[t]['radii'][best_idx_per_tube[t]] >= best_dist_per_tube[t] for t in range(len(tubes_world))])
 
-            tube_center = centers_t[best_i]
-            tube_radius = radii_t[best_i]
+            best_tube = np.argmin(best_dist_per_tube)
+            best_i    = best_idx_per_tube[best_tube]
+            tube_center = tubes_world[best_tube]['centers'][best_i]
+            tube_radius = tubes_world[best_tube]['radii'][best_i]
+            d = current_pos - tube_center
+            dist = np.linalg.norm(d)
+            
+            if not isInside:
+                current_pos = tube_center + d/dist * tube_radius
 
             # Compute distance to tube center
-            d = np.sqrt(best_dist)
+            d = np.linalg.norm(current_pos - tube_center)
 
             # Normalize distance for weighting
             x = 1.0 - np.clip(d / dist_activation_correction, 0.0, 1.0)
@@ -511,9 +513,9 @@ def main():
             w = x * x * (3 - 2 * x)   # 3x^2 – 2x^3
 
             # Radius-dependent attraction
-            if np.linalg.norm(t_v) > 1e-6:
+            if np.linalg.norm(v6[:3]) > 1e-6:
                 correction = w * gain_attraction * (tube_center - current_pos) / (tube_radius + 1e-6)
-                current_pos += correction * loop_dt
+                current_pos += correction * dt
 
             # --- integrate rotation (roll-pitch-yaw) ---
             rx, ry, rz = r_v * loop_dt

@@ -365,12 +365,12 @@ def main():
         # visualize radius by scatter size every few points
         step = 20
         for idx in range(0, len(centers), step):
-            normal = centers[idx]
+            normal = centers[-1] - centers[0]
             draw_disc3d(
                 ax,
                 center=centers[idx],
                 radius=radii[idx],     # data-unit radius
-                normal=(1,0,0),        # disc facing "up"
+                normal=normal,        # disc facing "up"
                 color=cmap(k),
                 alpha=0.1
             )
@@ -385,6 +385,7 @@ def main():
     current_pos = tubes[0]['centers'][0].copy()
     cube_R = np.eye(3) # no rotation
     current_cube = draw_cube(ax, current_pos, size=0.03, color='k')
+    projected_cube = draw_cube(ax, current_pos, size=0.015, color='blue', alpha=0.1)
     ax.legend(loc="upper right")
     fig.canvas.draw()
     plt.pause(0.05)
@@ -461,34 +462,31 @@ def main():
             cube_R = cube_R @ Rz @ Ry @ Rx
 
             # --- Find closest point across ALL tubes ---
-            best_dist = np.inf
-            best_tube = None
-            best_i = None
+            best_dist_per_tube = []
+            best_idx_per_tube = []
 
-            for t_idx, tube in enumerate(tubes):
+            for tube in tubes:
                 centers_t = tube['centers']
-                d2 = np.sum((centers_t - current_pos)**2, axis=1)
-                i = np.argmin(d2)
-                if d2[i] < best_dist:
-                    best_dist = d2[i]
-                    best_tube = t_idx
-                    best_i = i
+                d = np.sum((centers_t - current_pos)**2, axis=1)
+                i = np.argmin(d)
+                best_idx_per_tube.append(i)
+                best_dist_per_tube.append(np.sqrt(d[i]))
 
-            # Extract reference from best tube
-            centers_t = tubes[best_tube]['centers']
-            radii_t   = tubes[best_tube]['radii']
+            isInside = np.any([tubes[t]['radii'][best_idx_per_tube[t]] >= best_dist_per_tube[t] for t in range(len(tubes))])
 
-            tube_center = centers_t[best_i]
-            tube_radius = radii_t[best_i]
-
+            best_tube = np.argmin(best_dist_per_tube)
+            best_i    = best_idx_per_tube[best_tube]
+            tube_center = tubes[best_tube]['centers'][best_i]
+            tube_radius = tubes[best_tube]['radii'][best_i]
             d = current_pos - tube_center
             dist = np.linalg.norm(d)
-
-            if dist > tube_radius:
+            
+            if not isInside:
                 current_pos = tube_center + d/dist * tube_radius
 
             # Update scatter position in 3D
             update_cube(current_cube, current_pos, cube_R, size=0.03)
+            update_cube(projected_cube, tube_center, np.eye(3), size=0.015)
 
             fig.canvas.draw_idle()
             plt.pause(loop_dt)
