@@ -113,7 +113,7 @@ def set_axes_equal(ax):
 
 def plot_environment(ax, demo, obstacles, goal):
     ax.plot(demo['x'][:,0], demo['x'][:,1], demo['x'][:,2],
-            'b-', linewidth=2, label='Demo')
+            'r-', linewidth=2, label='Demo')
     ax.scatter(goal[0], goal[1], goal[2], color='green', s=100, label='Goal')
 
     # draw all obstacles

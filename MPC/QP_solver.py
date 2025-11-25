@@ -207,70 +207,154 @@ class QPController:
 
                 self.add_constraint(A_row, b_scalar)
                 
-    def add_local_gaussian_tangent_plane_constraints(self, obstacles, margin = 0.05):
-            """
-            For each spherical obstacle, create a local tangent plane toward each
-            considered point/joint and add a constraint preventing that joint from crossing the plane.
-            A similar technique can be found in
-            A Quadratic Programming Approach to Manipulation in Real-Time Using Modular Robots, Chao Liu and Mark Yim, 2021
+    def add_local_tangent_plane_constraints(self, obstacles, margin=0.05,
+                                    gap_threshold=0.03,
+                                    max_constraints_per_obstacle=40,
+                                    qdot_max_scalar=1.0,
+                                    vmin_threshold=1e-3):
 
-            Parameters
-            ----------
-            obstacles : list of dict
-                [{'center': np.array(3), 'radius': float}, ...]
-            """
-            
-            def skew(v):
-                return np.array([
-                    [0, -v[2],  v[1]],
-                    [v[2], 0,  -v[0]],
-                    [-v[1], v[0],  0]
-                ])
-            
-            franka_contact_points = [
-                # --- fingertips when gripper closed ---
-                np.array([0.00, 0.00, 0.0]),   # center tips
-                np.array([0.00, 0.00, -0.06]), # center palm
+        def skew_batch(r):
+            # r: (N,3)
+            # return: (N,3,3)
+            S = np.zeros((r.shape[0], 3, 3))
+            S[:,0,1] = -r[:,2]
+            S[:,0,2] =  r[:,1]
+            S[:,1,0] =  r[:,2]
+            S[:,1,2] = -r[:,0]
+            S[:,2,0] = -r[:,1]
+            S[:,2,1] =  r[:,0]
+            return S
 
-                # # # --- palm corners (front face, outer square) ---
-                np.array([+0.0, -0.12, -0.08]), # top-right
-                np.array([+0.0, 0.12, -0.08]), # top-left
-                np.array([+0.0, -0.12, -0.04]), # bottom-right
-                np.array([+0.0, 0.12, -0.04]), # bottom-left
-            ]
-            
-            for obs in obstacles:
-                mu = np.array(obs['center'], dtype=float)
-                Sigma = np.array(obs['Sigma'], dtype=float)
-                c = float(obs.get('level', 1.0))  # Mahalanobis level (analogous to radius)
-                Sigma_inv = np.linalg.inv(Sigma)
-                
-                T_ee = self.robot.fkine(self.joint_positions)
-                R_ee, p_ee = T_ee.R, T_ee.t
-                J = self.robot.jacob0(self.joint_positions)
-                Jv = J[0:3, :]     # linear part
-                Jw = J[3:6, :]     # angular part
+        # ==============================
+        #  CONTACT GRID
+        # ==============================
+        palm_y_min  = -0.12
+        palm_y_max  =  0.12
+        palm_z_min  = -0.08
+        palm_z_max  = -0.04
+        palm_res    = 20
 
-                for p_local in franka_contact_points:
-                    p_world = p_ee + R_ee @ p_local
+        fingertip_z = 0.0
+        fingertip_res = 20
 
-                    r = p_world - p_ee
-                    Jp = Jv - skew(r) @ Jw
+        finger_width  = 0.02
+        finger_height = 0.03
+        inner_offset  = 0.015
 
-                    d = p_world - mu
-                    dist_mahal = np.sqrt(d.T @ Sigma_inv @ d)
-                    if dist_mahal < 1e-9:
-                        s = np.array([1.0, 0.0, 0.0])
-                        o_prime = mu + c * s
-                    else:
-                        # Projected point on the ellipsoid surface
-                        o_prime = mu + (c / dist_mahal) * d
+        ys = np.linspace(palm_y_min, palm_y_max, palm_res)
+        zs = np.linspace(palm_z_min, palm_z_max, palm_res)
+        palm = np.array([[0.0, y, z] for y in ys for z in zs])
 
-                        # Tangent-plane normal at that point (ellipsoid surface normal)
-                        n = Sigma_inv @ (o_prime - mu)
-                        s = n / np.linalg.norm(n)
+        yf = np.linspace(-finger_width/2, finger_width/2, fingertip_res)
+        zf = np.linspace(-finger_height/2, finger_height/2, fingertip_res)
+        tip  = np.array([[0.0, y, fingertip_z + z] for y in yf for z in zf])
 
-                    # Tangent plane constraint (same as sphere)
-                    A_row = s.T @ Jp
-                    b_scalar = ((s.T @ (o_prime - p_world)) / (self.dt * 2))
-                    self.add_constraint(A_row, b_scalar)
+        edge_zs = np.linspace(-finger_height/2, finger_height/2, fingertip_res)
+        edges = np.array(
+            [[0.0,  finger_width/2, z] for z in edge_zs] +
+            [[0.0, -finger_width/2, z] for z in edge_zs]
+        )
+
+        inner = np.array(
+            [[0.0, +inner_offset, fingertip_z + z] for z in zf] +
+            [[0.0, -inner_offset, fingertip_z + z] for z in zf]
+        )
+
+        franka_local = np.vstack((palm, tip, edges, inner))  # (N,3)
+        N = franka_local.shape[0]
+
+        # ------------------------------------
+        # FK & JACOBIAN ONCE
+        # ------------------------------------
+        T_ee = self.robot.fkine(self.joint_positions)
+        R_ee, p_ee = T_ee.R, T_ee.t
+        J = self.robot.jacob0(self.joint_positions)
+        Jv = J[0:3, :]
+        Jw = J[3:6, :]
+
+        # World positions of all contact points
+        p_world = p_ee + (R_ee @ franka_local.T).T   # (N,3)
+
+        # offset from tool frame origin
+        r = p_world - p_ee                           # (N,3)
+
+        # skew batch and Jacobians at points
+        S = skew_batch(r)                            # (N,3,3)
+        Jp = Jv[None,:,:] - np.einsum('nij,jk->nik', S, Jw)   # (N,3,n_dof)
+
+        # ------------------------------------
+        # LOOP OVER OBSTACLES, BUT THIN CONSTRAINTS
+        # ------------------------------------
+        for obs in obstacles:
+            sphere_center = np.asarray(obs['center'], float)
+            sphere_radius = float(obs['radius']) + abs(margin)
+
+            # vector from point to sphere
+            vec = sphere_center[None,:] - p_world         # (N,3)
+            dist = np.linalg.norm(vec, axis=1)            # (N,)
+
+            # points too far from sphere: ignore early
+            # (gap is distance from sphere surface)
+            gap = dist - sphere_radius                    # (N,)
+            near_mask = gap < gap_threshold
+            if not np.any(near_mask):
+                continue
+
+            vec_near = vec[near_mask]
+            dist_near = dist[near_mask]
+            gap_near  = gap[near_mask]
+
+            # unit normal s for near points
+            s_near = vec_near / dist_near[:,None]         # (N_near,3)
+
+            # tangent plane point
+            o_prime_near = sphere_center - sphere_radius * s_near
+
+            # plane distance (like before)
+            d_plane_near = np.linalg.norm(
+                o_prime_near - p_world[near_mask],
+                axis=1
+            )
+
+            # A_i = s_i^T * Jp_i
+            Jp_near = Jp[near_mask]                      # (N_near,3,n_dof)
+            A_near = np.einsum("ni,nij->nj", s_near, Jp_near)  # (N_near,n_dof)
+
+            # conservative max normal velocity assuming |qdot_j| <= qdot_max_scalar
+            # (if you have per-joint limits, replace scalar by vector and use dot)
+            v_max_near = np.sum(np.abs(A_near), axis=1) * qdot_max_scalar  # (N_near,)
+
+            # points that can actually move into the obstacle this step
+            # require gap <= v_max * dt + small buffer
+            can_hit_mask = gap_near <= (v_max_near * self.dt + 1e-4)
+
+            if not np.any(can_hit_mask):
+                continue
+
+            idx = np.where(near_mask)[0][can_hit_mask]  # indices in original [0..N)
+
+            # If still too many, keep only the most dangerous ones: smallest gap
+            if idx.size > max_constraints_per_obstacle:
+                # sort by gap ascending
+                order = np.argsort(gap[idx])
+                idx = idx[order[:max_constraints_per_obstacle]]
+
+            # final rows
+            for i in idx:
+                # recompute s and A row for that i (or reuse sliced arrays)
+                v = sphere_center - p_world[i]
+                d = np.linalg.norm(v)
+                if d < 1e-9:
+                    s = np.array([1.0, 0.0, 0.0])
+                else:
+                    s = v / d
+
+                # tangent plane anchor
+                o_prime = sphere_center - sphere_radius * s
+
+                # Jacobian at point i
+                Ji = Jp[i]  # (3,n_dof)
+                A_row = s @ Ji
+                b_scalar = np.linalg.norm(o_prime - p_world[i]) / (self.dt * 2)
+
+                self.add_constraint(A_row, b_scalar)

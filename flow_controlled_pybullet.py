@@ -462,8 +462,8 @@ def main():
     trans_gain = 0.6   # [m/s] per full deflection
     rot_gain = 1.5     # [rad/s] per full deflection
     loop_dt = dt       # controller loop time
-    gain_attraction = 1.0  # [m/s] toward tube center if outside
-    dist_activation_correction = 0.08  # [m] distance threshold to start applying correction
+    gain_attraction = 3.0  # [m/s] toward tube center if outside
+    dist_activation_correction = 0.1  # [m] distance threshold to start applying correction
 
     current_pos = centers_world[0].copy()
     R_ee = panda.fkine(panda.q).R   # end-effector orientation (world frame)
@@ -476,6 +476,7 @@ def main():
             r_v = v6[3:] * rot_gain
 
             # project onto tube surface
+            current_pos += trans_gain * t_v * dt
             current_pos = project_point_to_all_tubes(current_pos, tubes_world)
 
             # --- Find closest point across ALL tubes ---
@@ -505,8 +506,6 @@ def main():
             correction = (tube_center - current_pos) * gain_attraction 
             if np.linalg.norm(v6[:3]) > 1e-6 and tube_radius < dist_activation_correction:
                 current_pos += correction * dt
-
-            current_pos += trans_gain * t_v * dt
 
             # --- integrate rotation (roll-pitch-yaw) ---
             rx, ry, rz = r_v * loop_dt

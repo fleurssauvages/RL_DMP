@@ -422,7 +422,7 @@ def main():
     # Motion gains
     trans_gain = 0.1  # [m/s] per full deflection
     rot_gain = 1.5   # [rad/s] per full deflection
-    gain_attraction = 1.0  # [m/s] toward tube center if outside
+    gain_attraction = 3.0  # [m/s] toward tube center if outside
     dist_activation_correction = 0.1  # [m] distance threshold to start applying correction
     loop_dt = 0.05    # [s] loop period
 
@@ -460,6 +460,7 @@ def main():
             ])
 
             # --- Find closest point across ALL tubes ---
+            current_pos += trans_gain * t_v * dt_loop
             best_dist_per_tube = []
             best_idx_per_tube = []
 
@@ -486,8 +487,6 @@ def main():
             correction = (tube_center - current_pos) * gain_attraction 
             if np.linalg.norm(v) > 1e-6 and tube_radius < dist_activation_correction:
                 current_pos += correction * dt_loop
-
-            current_pos += trans_gain * t_v * dt_loop
 
             # Apply Motion
             cube_R = cube_R @ Rz @ Ry @ Rx
