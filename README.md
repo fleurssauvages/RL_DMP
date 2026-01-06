@@ -12,6 +12,7 @@ The repo include a demo to generate a trajectory (with live animations) which is
 The Reinforcement Learning formulation is based on:
 > Petar Kormushev, Sylvain Calinon and Darwin G. Caldwell  
 > ["Robot Motor Skill Coordination with EM-based Reinforcement Learning."](https://www.researchgate.net/publication/224199135_Robot_Motor_Skill_Coordination_with_EM-based_Reinforcement_Learning) (2010)
+Is it implemented with numba for fast computation.
 
 The LMPC problem formulation is based on:  
 > Alberto, Nicolas Torres, et al.  
@@ -68,23 +69,23 @@ pip install pybullet
   ```
   Each trajectory is replayed succesively. Note: this could be use to evaluate which trajectories are actually replayable with the full robot model and controller.
 
-  - **Multi Agent RL with moving obstacle**  
-  ```bash
-  python demo_moving_object.py
-  ```
-  The obstacle is moving as a sinus. The exploration is rescaled depending on the object's motion, to fine a new trajectory. The goal is to get a form of temporal consistency.
+- **Multi Agent RL with moving obstacle**  
+```bash
+python demo_moving_object.py
+```
+The obstacle is moving as a sinus. The exploration is rescaled depending on the object's motion, to fine a new trajectory. The goal is to get a form of temporal consistency.
 
-  - **Example coupled with Space Mouse Joystick: hard constraint**  
-  ```bash
-  python path_constrained_demo.py
-  ```
-  Generate acceptables zones as "tubes" around the previously exported trajectories. These tubes can be used to then control a 6D desired position with hard limits, for example in this example with a 6D Space Mouse. The same script is also implemented with Pybullet and the full robot model.
+- **Example coupled with Space Mouse Joystick: hard constraint**  
+```bash
+python path_constrained_demo.py
+```
+Generate acceptables zones as "tubes" around the previously exported trajectories. These tubes can be used to then control a 6D desired position with hard limits, for example in this example with a 6D Space Mouse. The same script is also implemented with Pybullet and the full robot model.
 
-    - **Example coupled with Space Mouse Joystick: flowed control**  
-  ```bash
-  python flow_controlled_demo.py
-  ```
-  How top of the previous hard constraints, when the joystick is active and the radius is small (i.e we are close to obstacles) we pull the position towards the closest trajectory. The same script is also implemented with Pybullet and the full robot model.
+  - **Example coupled with Space Mouse Joystick: flowed control**  
+```bash
+python flow_controlled_demo.py
+```
+How top of the previous hard constraints, when the joystick is active and the radius is small (i.e we are close to obstacles) we pull the position towards the closest trajectory. The same script is also implemented with Pybullet and the full robot model.
 ---
 
 ## 📂 Project Structure
