@@ -146,9 +146,8 @@ def main(seed=1, doAnimation=True, export=False):
 
         # --- Visualization ---
         if doAnimation:
-            fig.clf()
-            ax_traj = fig.add_subplot(121, projection='3d')
-            ax_ret = fig.add_subplot(122)
+            ax_traj.cla()
+            ax_ret.cla()
 
             # Plot environment and demo
             plot_environment(ax_traj, demo, obstacles, goal)
@@ -240,4 +239,4 @@ def main(seed=1, doAnimation=True, export=False):
 
 
 if __name__ == "__main__":
-    main(seed=6, doAnimation=False, export=False)
+    main(seed=6, doAnimation=True, export=False)

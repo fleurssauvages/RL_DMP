@@ -68,6 +68,12 @@ pip install pybullet
   ```
   Each trajectory is replayed succesively. Note: this could be use to evaluate which trajectories are actually replayable with the full robot model and controller.
 
+  - **Multi Agent RL with moving obstacle**  
+  ```bash
+  python demo_moving_object.py
+  ```
+  The obstacle is moving as a sinus. The exploration is rescaled depending on the object's motion, to fine a new trajectory. The goal is to get a form of temporal consistency.
+
   - **Example coupled with Space Mouse Joystick: hard constraint**  
   ```bash
   python path_constrained_demo.py
@@ -85,9 +91,6 @@ pip install pybullet
 
 ```
 ├── images/                         # Demo GIFs
-│   ├── RL.gif
-│   ├── pybullet.gif
-│   ├── RL_multi.gif
 ├── MPC/                            # Contains the LMPC and QP
 ├── scripts/
 │   ├── demo_utils.py               # utils for generating and plotting for the RL demo
@@ -98,6 +101,7 @@ pip install pybullet
 │   ├── resample.py                 # utils for resampling trajectories
 ├── demo_simple_6D.py               # Reinforcement learning demo
 ├── demo_multiagent_6D.py           # Extension with multiple agents
+├── demo_moving_object.py           # Extension with an obstacle that is moving as a sinus
 ├── replay_pybullet.py              # Replay trajectory on robot
 ├── replay_pybullet_multi.py        # Replay multiple trajectory on robot successively
 ├── path_constrained_demo.py        # Tube constraints for user controlled position with a Space Mouse Joystick
@@ -128,6 +132,12 @@ pip install pybullet
 <img src="images/RL_multi.gif" width="800" alt="RL Multi">
 
 ---
+
+### 🔹 Multi Agent RL with moving object
+<img src="images/RL_moving.gif" width="800" alt="RL Moving">
+
+---
+
 
 ### 🔹 Hard Tube Constrainsts with User Joystick Input
 <img src="images/hard_constrained.gif" width="800" alt="Tube const">

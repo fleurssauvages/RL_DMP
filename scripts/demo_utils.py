@@ -88,6 +88,18 @@ def init_from_demo(dmp, demo, kp_diag=50.0):
         dmp.Kp[i] = kp_diag * np.eye(dmp.D)
     return dmp
 
+def init_from_demo_straightline(dmp, demo, kp_diag=50.0):
+    """
+    Populate dmp.X and dmp.Kp from demo, assuming a straight-line demo.
+    - Set all X_i to the demo's goal position
+    - Set Kp_i to kp_diag * I
+    """
+    goal = demo['x'][-1]
+    for i in range(dmp.K):
+        dmp.X[i] = goal
+        dmp.Kp[i] = kp_diag * np.eye(dmp.D)
+    return dmp
+
 def set_axes_equal(ax):
     """
     Make 3D plot axes equal.
@@ -125,7 +137,24 @@ def plot_environment(ax, demo, obstacles, goal):
         z = c[2] + r * np.cos(v)
         ax.plot_surface(x, y, z, color='red', alpha=0.25, linewidth=0)
     
-    ax.set_title("Iteration 0: Demo and obstacle")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.view_init(elev=10., azim=-20)
+    set_axes_equal(ax)
+
+def plot_environment_no_demo(ax, obstacles, goal):
+    ax.scatter(goal[0], goal[1], goal[2], color='green', s=100, label='Goal')
+
+    # draw all obstacles
+    for _, ob in enumerate(obstacles):
+        c, r = ob['center'], ob['radius']
+        u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:20j]
+        x = c[0] + r * np.cos(u) * np.sin(v)
+        y = c[1] + r * np.sin(u) * np.sin(v)
+        z = c[2] + r * np.cos(v)
+        ax.plot_surface(x, y, z, color='red', alpha=0.25, linewidth=0)
+    
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")

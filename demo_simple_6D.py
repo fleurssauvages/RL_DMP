@@ -74,6 +74,7 @@ def main(seed=1, doAnimation=False, export=False):
     ax_vel.set_ylabel("|v| [m/s]")
     ax_vel.set_xlim(0, duration)
     ax_vel.set_ylim(0, 1.6)
+    ax_returns = fig_traj.add_subplot(144)
     
     if doAnimation:
         plt.show(block=False)
@@ -125,9 +126,8 @@ def main(seed=1, doAnimation=False, export=False):
 
         # # ----- Visualization of rollouts -----
         if doAnimation:
-            fig_traj.clf()
-            ax_traj = fig_traj.add_subplot(121, projection='3d')
-            ax_vel = fig_traj.add_subplot(143)
+            ax_traj.cla()
+            ax_vel.cla()
             plot_environment(ax_traj, demo, obstacles, goal)
             plot_orientations(ax_traj, demo, step=10, scale=0.05)
             
@@ -168,7 +168,7 @@ def main(seed=1, doAnimation=False, export=False):
             ax_traj.legend()
             set_axes_equal(ax_traj)
 
-            ax_returns = fig_traj.add_subplot(144)
+            ax_returns.cla()
             all_returns_plot = np.reshape(all_returns, (it+1, rollouts_per_iter))
             indexes = np.reshape(np.repeat(np.arange(it+1), rollouts_per_iter), (it+1, rollouts_per_iter))
             ax_returns.scatter(indexes.flatten(), all_returns_plot.flatten())
