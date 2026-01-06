@@ -49,7 +49,7 @@ def scale_exploration_by_obstacle_motion(
     scale = float(delta_obs) / float(motion_ref + 1e-12)
     return base_std * scale, scale
 
-def main(seed=1):
+def main(seed=1, doPlot = True):
     np.random.seed(seed)
     
     # --- Parameters ---
@@ -57,7 +57,7 @@ def main(seed=1):
     duration, dt = 1.0, 0.02
     weight_demo, weight_goal = 0.05, 0.95
     weight_jerk, weight_end_vel = 0.005, 0.05
-    n_iterations, rollouts_per_agent = 120, 4
+    n_iterations, rollouts_per_agent = 30, 4
     n_agents = 5
     exploration_std = make_exploration_std(D, K, sigma_pos=0.05, sigma_ori=0.1, sigma_kp=0.02)
     base_exploration_std = exploration_std.copy()
@@ -90,27 +90,25 @@ def main(seed=1):
         diversity_strength=0.1 * np.mean(exploration_std)
     )
 
-    all_returns = []
-    best_traj = None
-    best_R = -np.inf
-
     # --- Visualization setup ---
-    fig = plt.figure(figsize=(22, 14))
-    ax_traj = fig.add_subplot(111, projection='3d')
-    fig.canvas.manager.set_window_title('Multi-Agent Trajectories')
-    middle = (demo["x"][0, :3] + demo["x"][-1, :3]) / 2
+    if doPlot:
+        fig = plt.figure(figsize=(22, 14))
+        ax_traj = fig.add_subplot(111, projection='3d')
+        fig.canvas.manager.set_window_title('Multi-Agent Trajectories')
+        middle = (demo["x"][0, :3] + demo["x"][-1, :3]) / 2
 
-    paused = False
-    def on_key(event):
-        nonlocal paused
-        if event.key == " " or event.key == "space":
-            paused = not paused
-            print("Paused" if paused else "Resumed")
+        paused = False
+        def on_key(event):
+            nonlocal paused
+            if event.key == " " or event.key == "space":
+                paused = not paused
+                print("Paused" if paused else "Resumed")
 
-    fig.canvas.mpl_connect("key_press_event", on_key)
+        fig.canvas.mpl_connect("key_press_event", on_key)
 
     # --- Main loop ---
     nb_points_simulation = 200
+    times_per_simulation = np.zeros(nb_points_simulation)
     for i in range(nb_points_simulation):
         t = dt * i
         offset_prev = offset if i > 0 else np.zeros(3)
@@ -119,6 +117,7 @@ def main(seed=1):
         delta_obs = np.linalg.norm(offset - offset_prev)
         exploration_std, scale = scale_exploration_by_obstacle_motion(base_exploration_std, delta_obs, np.linalg.norm(amp_xyz)/2)
 
+        t0 = time.time()
         for it in range(n_iterations):
             population.reset_histories()
 
@@ -143,83 +142,77 @@ def main(seed=1):
 
             # Run all rollouts
             results_all = [rollout_job(agent_id) for agent_id in jobs]
-
-            # Prepare collections
-            rollouts_data = []  # for plotting
-
-            # Assign results per agent
-            for agent_id, params_k, traj, Rk in results_all:
+            
+            # # Assign results per agent
+            for agent_id, params_k, _, Rk in results_all:
                 agent = population.agents[agent_id]
                 agent.add_rollout(params_k, Rk)
-                rollouts_data.append((agent_id, traj, Rk))
-                all_returns.append(Rk)
 
             # Update each agent and apply diversity
             population.update_agents()
             population.apply_diversity_pressure()
             population.update_exploration(exploration_std * (decay ** it))
             population.update_diversity_strength(population.diversity_strength * decay)
-            
-            # Find best-performing agent and trajectory
-            best_idx, best_agent = population.best_agent()
-            best_R_iter = np.max(best_agent.history_returns)
-            if best_R_iter > best_R:
-                best_R = best_R_iter
-                best_traj = env.simulate_numba(best_agent.theta)
-                dmp.set_flat_params(best_agent.theta)
 
-            # --- Compute best traj/return per agent ---
-            best_trajs_per_agent = []
-            best_returns_per_agent = []
+        # --- Compute best traj/return per agent ---
+        best_trajs_per_agent = []
+        best_returns_per_agent = []
 
-            for agent_id, agent in enumerate(population.agents):
-                if len(agent.history_returns) == 0:
-                    best_trajs_per_agent.append(None)
-                    best_returns_per_agent.append(-np.inf)
-                    continue
+        for _, agent in enumerate(population.agents):
+            if len(agent.history_returns) == 0:
+                best_trajs_per_agent.append(None)
+                best_returns_per_agent.append(-np.inf)
+                continue
 
-                history_R = np.array(agent.history_returns)
-                best_idx_local = np.argmax(history_R)
-                best_params = agent.history_params[best_idx_local]
-                best_returns_per_agent.append(history_R[best_idx_local])
+            history_R = np.array(agent.history_returns)
+            best_idx_local = np.argmax(history_R)
+            best_params = agent.history_params[best_idx_local]
+            best_returns_per_agent.append(history_R[best_idx_local])
 
-                best_traj = env.simulate_numba(best_params)
-                best_trajs_per_agent.append(best_traj)
+            best_traj = env.simulate_numba(best_params)
+            best_trajs_per_agent.append(best_traj)
 
+        t1 = time.time()
+        times_per_simulation[i] = t1 - t0
+        print(f"Iteration {i+1}/{nb_points_simulation} completed in {times_per_simulation[i]:.4f}s")
 
-        # --- Visualization ---
-        azim = ax_traj.azim
-        elev = ax_traj.elev
-        ax_traj.cla()
+        # # --- Visualization ---
+        if doPlot:
+            azim = ax_traj.azim
+            elev = ax_traj.elev
+            ax_traj.cla()
 
-        plot_environment_no_demo(ax_traj, obstacles, goal)
+            plot_environment_no_demo(ax_traj, obstacles, goal)
 
-        # Plot all agent rollouts (faint, colored)
-        cmap = plt.cm.get_cmap("nipy_spectral", n_agents)
-        # for agent_id, params_k, traj, Rk in results_all:
-        #     xs, ys, zs = traj[:, 0], traj[:, 1], traj[:, 2]
-        #     ax_traj.plot(xs, ys, zs, color=cmap(agent_id), alpha=0.3)
-            
-        # === plot best trajectory per agent ===
-        for i, traj_best_local in enumerate(best_trajs_per_agent):
-            xs, ys, zs = traj_best_local['x'][:, 0], traj_best_local['x'][:, 1], traj_best_local['x'][:, 2]
-            collided = traj_best_local["collided"]
-            ax_traj.plot(xs, ys, zs, color=cmap(i), linewidth=2.5, label=f"Agent {i} best (R={best_returns_per_agent[i]:.3f}, {'collided' if collided else 'free'})")
-            # plot_orientations(ax_traj, traj_best_local, step=10, scale=0.02, alpha=0.4)
+            # Plot all agent rollouts (faint, colored)
+            cmap = plt.cm.get_cmap("nipy_spectral", n_agents)
+            # for agent_id, params_k, traj, Rk in results_all:
+            #     xs, ys, zs = traj[:, 0], traj[:, 1], traj[:, 2]
+            #     ax_traj.plot(xs, ys, zs, color=cmap(agent_id), alpha=0.3)
+                
+            # === plot best trajectory per agent ===
+            for i, traj_best_local in enumerate(best_trajs_per_agent):
+                xs, ys, zs = traj_best_local['x'][:, 0], traj_best_local['x'][:, 1], traj_best_local['x'][:, 2]
+                collided = traj_best_local["collided"]
+                ax_traj.plot(xs, ys, zs, color=cmap(i), linewidth=2.5, label=f"Agent {i} best (R={best_returns_per_agent[i]:.3f}, {'collided' if collided else 'free'})")
+                # plot_orientations(ax_traj, traj_best_local, step=10, scale=0.02, alpha=0.4)
 
-        # Finalize plot
-        set_axes_equal(ax_traj)
-        ax_traj.set_xlim([middle[0] - demo_len/2, middle[0] + demo_len/2])
-        ax_traj.set_ylim([middle[1] - demo_len/2, middle[1] + demo_len/2])
-        ax_traj.set_zlim([middle[2] - demo_len/2, middle[2] + demo_len/2])
-        ax_traj.legend()
-        fig.tight_layout()
-        ax_traj.view_init(elev=elev, azim=azim)
-        plt.pause(0.001)
+            # Finalize plot
+            set_axes_equal(ax_traj)
+            ax_traj.set_xlim([middle[0] - demo_len/2, middle[0] + demo_len/2])
+            ax_traj.set_ylim([middle[1] - demo_len/2, middle[1] + demo_len/2])
+            ax_traj.set_zlim([middle[2] - demo_len/2, middle[2] + demo_len/2])
+            ax_traj.legend()
+            fig.tight_layout()
+            ax_traj.view_init(elev=elev, azim=azim)
+            plt.pause(0.001)
 
-        while paused:
-            plt.pause(0.05)
+            while paused:
+                plt.pause(0.05)
+
+    print(f"Average time per iteration over simulation: {np.mean(times_per_simulation):.4f}s")
+    print(f"Average frame rate: {1.0/np.mean(times_per_simulation):.2f} Hz")
 
 
 if __name__ == "__main__":
-    main(seed=6)
+    main(seed=6, doPlot=True)
