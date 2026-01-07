@@ -57,7 +57,7 @@ def main(seed=1, doPlot = True):
     duration, dt = 1.0, 0.02
     weight_demo, weight_goal = 0.05, 0.95
     weight_jerk, weight_end_vel = 0.005, 0.05
-    n_iterations, rollouts_per_agent = 30, 4
+    n_iterations, rollouts_per_agent = 10, 8
     n_agents = 5
     exploration_std = make_exploration_std(D, K, sigma_pos=0.05, sigma_ori=0.1, sigma_kp=0.02)
     base_exploration_std = exploration_std.copy()
@@ -107,7 +107,7 @@ def main(seed=1, doPlot = True):
         fig.canvas.mpl_connect("key_press_event", on_key)
 
     # --- Main loop ---
-    nb_points_simulation = 200
+    nb_points_simulation = 360
     times_per_simulation = np.zeros(nb_points_simulation)
     for i in range(nb_points_simulation):
         t = dt * i
@@ -150,7 +150,7 @@ def main(seed=1, doPlot = True):
 
             # Update each agent and apply diversity
             population.update_agents()
-            population.apply_diversity_pressure()
+            population.apply_diversity_pressure(exploration_std=exploration_std)
             population.update_exploration(exploration_std * (decay ** it))
             population.update_diversity_strength(population.diversity_strength * decay)
 
