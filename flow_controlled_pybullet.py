@@ -470,6 +470,7 @@ def main():
     cube_quat = rotmat_to_quat(R_ee)
 
     try:
+        Uopt = np.zeros((6 * lmpc_solver.horizon,))
         while True:
             v6 = get_spacemouse_6d()
             t_v = v6[:3] * trans_gain
@@ -550,7 +551,7 @@ def main():
             T_current = panda.fkine(panda.q)
 
             # MPC: desired twist sequence
-            Uopt, Xopt, poses = lmpc_solver.solve(T_current, T_des)
+            Uopt, Xopt, poses = lmpc_solver.solve(T_current, T_des, xi0=Uopt[0:6])
 
             qp_solver.update_robot_state(panda)
             qp_solver.add_local_tangent_plane_constraints(obstacles_world, margin=0.02)

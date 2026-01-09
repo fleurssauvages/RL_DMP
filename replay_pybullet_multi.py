@@ -124,6 +124,7 @@ for traj in traj_list:
     panda.q = panda.qr
     sim_time = 0.0
     try:
+        Uopt = np.zeros((6 * lmpc_solver.horizon,))
         while sim_time < duration + 1.0:
             if sim_time < duration:
                 T_des = sm.SE3.Trans(traj['x'][int(sim_time/dt), :3]) * Tini * sm.SE3.RPY(traj['x'][int(sim_time/dt), 3:]) 
@@ -131,7 +132,7 @@ for traj in traj_list:
                 T_des = sm.SE3.Trans(traj['x'][-1, :3]) * Tini * sm.SE3.RPY(traj['x'][-1, 3:]) 
             # Compute desired pose from trajectory
             T_current = panda.fkine(panda.q)
-            Uopt, Xopt, poses = lmpc_solver.solve(T_current, T_des)
+            Uopt, Xopt, poses = lmpc_solver.solve(T_current, T_des, xi0=Uopt[0:6])
 
             #Solve QP
             qp_solver.update_robot_state(panda)

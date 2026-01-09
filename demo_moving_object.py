@@ -30,14 +30,36 @@ def update_obstacles_sinusoid(obstacles, base_centers, amp_xyz, t, period_iters,
         Current time in seconds.
     """
     phase = 2.0 * np.pi * (t / (period_iters * dt))  # full oscillation every period_iters
-    offset = amp_xyz * np.sin(phase)  # shape (3,)
+    for obs, c0, amp in zip(obstacles, base_centers, amp_xyz):
+        offset = amp * np.sin(phase)  # shape (3,)
+        obs["center"] = c0 + offset
+    return offset
+
+def update_obstacles_circular(obstacles, base_centers, radius, it, period_iters):
+    """Translate each obstacle center in a circular trajectory in the XY plane.
+
+    Parameters
+    ----------
+    obstacles : list[dict]
+        Each dict must contain a 'center' (np.array shape (3,)) and optionally other fields.
+    base_centers : list[np.ndarray]
+        Rest positions for obstacle centers (same length as obstacles).
+    radius : float
+        Radius of the circular trajectory (meters).
+    it : int
+        Current outer iteration.
+    period_iters : int
+        Number of iterations for a full circular motion.
+    """
+    angle = 2.0 * np.pi * (it % period_iters) / period_iters
     for obs, c0 in zip(obstacles, base_centers):
+        offset = radius * np.array([0.0, np.cos(angle), np.sin(angle)])
         obs["center"] = c0 + offset
     return offset
 
 
 def scale_exploration_by_obstacle_motion(
-    base_std, delta_obs, motion_ref
+    base_std, delta_obs, motion_ref,
 ):
     """Scale exploration std based on obstacle motion magnitude.
 
@@ -49,7 +71,7 @@ def scale_exploration_by_obstacle_motion(
     scale = float(delta_obs) / float(motion_ref + 1e-12)
     return base_std * scale, scale
 
-def main(seed=1, doPlot = True):
+def main(seed=1, doPlot = True, circular_motion=False):
     np.random.seed(seed)
     
     # --- Parameters ---
@@ -65,21 +87,25 @@ def main(seed=1, doPlot = True):
 
     # --- DMP and environment setup ---
     dmp = MixturePD(D=D, K=K, duration=duration, kp_diag=160.0, vel_gain=12.0)
-    demo = make_demo_6D(duration=duration, timesteps=int(duration / dt))
+    demo = make_demo_6D(duration=duration, timesteps=int(duration / dt), curvature=0.01)
     dmp = init_from_demo(dmp, demo, kp_diag=80.0)
     goal = demo["x"][-1]
 
     center = (demo["x"][0, :3] + demo["x"][-1, :3]) / 2
+    vect = (demo["x"][0, :3] + demo["x"][-1, :3])
     demo_len = np.linalg.norm(demo["x"][-1, :3] - demo["x"][0, :3])
     obstacles = [
-        {'center': center, 'radius': demo_len/6},
+        {'center': vect/2, 'radius': demo_len/6},
     ]
     env = ReachingEnv(dmp, dt=dt, obstacles=obstacles, demo_traj=demo, goal=goal)
     
     # Obstacle motion parameters
     base_centers = [obs['center'].copy() for obs in obstacles]   # keep "rest" positions
-    amp_xyz = np.array([0.0, 0.0, 0.1])  # meters: move obstacles along Z
+    amp_xyz = [
+        np.array([0.0, 0.0, 0.1]), 
+    ]  # meters: move obstacles along Y
     period_iters = 60                       # full oscillation every 60 outer iterations
+    radius_circular = 0.1                   # meters for circular motion
 
     # --- Multi-agent RL system ---
     population = MultiAgentPowerRL(
@@ -107,24 +133,22 @@ def main(seed=1, doPlot = True):
         fig.canvas.mpl_connect("key_press_event", on_key)
 
     # --- Main loop ---
-    nb_points_simulation = 360
+    nb_points_simulation = 180
     times_per_simulation = np.zeros(nb_points_simulation)
     for i in range(nb_points_simulation):
         t = dt * i
         offset_prev = offset if i > 0 else np.zeros(3)
-        offset = update_obstacles_sinusoid(obstacles, base_centers, amp_xyz, t, period_iters, dt)
+        if circular_motion:
+            offset = update_obstacles_circular(obstacles, base_centers, radius_circular, i, period_iters)
+        else:
+            offset = update_obstacles_sinusoid(obstacles, base_centers, amp_xyz, t, period_iters, dt)
         env.obstacles = obstacles
         delta_obs = np.linalg.norm(offset - offset_prev)
-        exploration_std, scale = scale_exploration_by_obstacle_motion(base_exploration_std, delta_obs, np.linalg.norm(amp_xyz)/2)
+        exploration_std, scale = scale_exploration_by_obstacle_motion(base_exploration_std, delta_obs, np.linalg.norm(amp_xyz))
 
         t0 = time.time()
         for it in range(n_iterations):
             population.reset_histories()
-
-            results_all = []
-            best_trajs_per_agent = []
-            best_returns_per_agent = []
-
             def rollout_job(agent_id):
                 agent_local = population.agents[agent_id]
                 params_k = agent_local.sample_policy()
@@ -150,7 +174,7 @@ def main(seed=1, doPlot = True):
 
             # Update each agent and apply diversity
             population.update_agents()
-            population.apply_diversity_pressure(exploration_std=exploration_std)
+            population.apply_diversity_pressure(exploration_std=exploration_std*0.1)
             population.update_exploration(exploration_std * (decay ** it))
             population.update_diversity_strength(population.diversity_strength * decay)
 
@@ -215,4 +239,4 @@ def main(seed=1, doPlot = True):
 
 
 if __name__ == "__main__":
-    main(seed=6, doPlot=True)
+    main(seed=6, doPlot=True, circular_motion=True)

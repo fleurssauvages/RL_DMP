@@ -29,7 +29,7 @@ class LinearMPCController:
         self.solution = None
         pass
     
-    def solve(self, ini_pose, des_pose):
+    def solve(self, ini_pose, des_pose, xi0=None):
         """
         Solve finite-horizon linear MPC:
         minimize ||X - X_des||^2 + gamma ||U||^2
@@ -77,6 +77,19 @@ class LinearMPCController:
             self.lb = np.tile(self.u_min, self.horizon)
         if self.u_max is not None:
             self.ub = np.tile(self.u_max, self.horizon)
+
+        # Constraint on initial velocity
+        if xi0 is not None and self.u_min is not None and self.u_max is not None:
+            # U0 <= xi0 + du0 where du0 the deviation allowed from current velocity, here du0 = u_max
+            # -U0 <= -(xi0 - du0)
+            G_add = np.zeros((12, self.n * self.horizon))
+            G_add[0:6, 0:6] = np.eye(6)
+            G_add[6:12, 0:6] = -np.eye(6)
+            h_add = np.hstack([xi0 + self.ub[:6], -(xi0 - self.ub[:6])])
+
+            # Append to existing inequalities (self.A, self.b)
+            self.A = G_add
+            self.b = h_add
             
         # Solve QP
         Uopt = solve_qp(sp.csc_matrix(self.H), self.g, G=sp.csc_matrix(self.A), h=self.b, \
