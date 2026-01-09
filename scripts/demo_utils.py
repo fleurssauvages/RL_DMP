@@ -38,7 +38,7 @@ def make_demo(duration=1.0, timesteps=200):
 
     return {'t': t, 'x': x, 'xdot': xdot}
 
-def make_demo_6D(duration=1.0, timesteps=200):
+def make_demo_6D(duration=1.0, timesteps=200, curvature=0.0):
     """
     Create a 6D demonstration trajectory:
       - First 3 dims: position (same as the original 3D demo)
@@ -57,7 +57,7 @@ def make_demo_6D(duration=1.0, timesteps=200):
         x[:, d] = start[d] + s * (goal[d] - start[d])
 
     # Add some curvature for the position components
-    x[:, 2] = -0.15 * np.sin(np.pi * s)  # z oscillation
+    x[:, 2] = curvature * np.sin(np.pi * s)  # z oscillation
 
     # ---- Orientation: rotation about X over time ----
     start_rpy = np.zeros(3)
