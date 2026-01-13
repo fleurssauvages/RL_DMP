@@ -75,7 +75,7 @@ python demo_moving_object.py
 ```
 The obstacle is moving as a sinus. The exploration is rescaled depending on the object's motion, to fine a new trajectory. The goal is to get a form of temporal consistency.
 
-- **Example coupled with Space Mouse Joystick: hard constraint**  
+<!-- - **Example coupled with Space Mouse Joystick: hard constraint**  
 ```bash
 python path_constrained_demo.py
 ```
@@ -85,7 +85,7 @@ Generate acceptables zones as "tubes" around the previously exported trajectorie
 ```bash
 python flow_controlled_demo.py
 ```
-How top of the previous hard constraints, when the joystick is active and the radius is small (i.e we are close to obstacles) we pull the position towards the closest trajectory. The same script is also implemented with Pybullet and the full robot model.
+How top of the previous hard constraints, when the joystick is active and the radius is small (i.e we are close to obstacles) we pull the position towards the closest trajectory. The same script is also implemented with Pybullet and the full robot model. -->
 ---
 
 ## 📂 Project Structure
@@ -105,10 +105,6 @@ How top of the previous hard constraints, when the joystick is active and the ra
 ├── demo_moving_object.py           # Extension with an obstacle that is moving as a sinus
 ├── replay_pybullet.py              # Replay trajectory on robot
 ├── replay_pybullet_multi.py        # Replay multiple trajectory on robot successively
-├── path_constrained_demo.py        # Tube constraints for user controlled position with a Space Mouse Joystick
-├── path_constrained_pybullet.py    # Same in Pybullet
-├── flow_controlled_demo.py         # Adds a flow to the tube constrained, plot in Matplotlib
-├── flow_controlled_pybullet.py     # Same in Pybullet
 ├── README.md                       # Project documentation
 └── LICENSE                         # License file
 ```
@@ -140,14 +136,14 @@ How top of the previous hard constraints, when the joystick is active and the ra
 ---
 
 
-### 🔹 Hard Tube Constrainsts with User Joystick Input
+<!-- ### 🔹 Hard Tube Constrainsts with User Joystick Input
 <img src="images/hard_constrained.gif" width="800" alt="Tube const">
 
 ---
 
 ### 🔹 Flow control, a force pulls the user towards the trajectory when the tube radius is small (Pybullet)
 <img src="images/flow_constrained.gif" width="800" alt="Tube const">
----
+--- -->
 
 </div>
 
