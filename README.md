@@ -70,10 +70,10 @@ pip install pybullet
   Each trajectory is replayed succesively. Note: this could be use to evaluate which trajectories are actually replayable with the full robot model and controller.
 
 - **Multi Agent RL with moving obstacle**  
-```bash
-python demo_moving_object.py
-```
-The obstacle is moving as a sinus. The exploration is rescaled depending on the object's motion, to fine a new trajectory. The goal is to get a form of temporal consistency.
+  ```bash
+  python demo_moving_object.py
+  ```
+  The obstacle is moving as a sinus. The exploration is rescaled depending on the object's motion, to fine a new trajectory. The goal is to get a form of temporal consistency.
 
 <!-- - **Example coupled with Space Mouse Joystick: hard constraint**  
 ```bash
