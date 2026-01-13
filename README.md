@@ -130,7 +130,7 @@ How top of the previous hard constraints, when the joystick is active and the ra
 
 ---
 
-### 🔹 Multi Agent RL with moving object
+### 🔹 Multi Agent RL (70 Hz Refresh) with moving object
 <img src="images/RL_moving.gif" width="800" alt="RL Moving">
 
 ---
